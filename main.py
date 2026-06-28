@@ -9,7 +9,8 @@ while True:
       print("\nAI Trading Journal")
       print("1. Add Trade")
       print("2.View Trades")
-      print("3. Quit")
+      print("3. Delete Trade")
+      print("4. Quit")
 
       choice = input("Choose an option: ")
 
@@ -53,6 +54,27 @@ while True:
                         print(f"P/L: {trade[4]}")
                         print(f"Result: {trade[5]}")
       elif choice == "3":
+            if len(trades) == 0:
+                  print("No trades to delete.")
+            else:
+                  for i in range(len(trades)):
+                        trade = trades[i]
+                        print(f"{i + 1}. {trade[0]} {trade[1]} P/L: {trade[4]}")
+
+                  try:
+                        trade_number = int(input("Which trade number would you like to delete? "))
+                  except ValueError:
+                        print("Invalid trade number.")
+                        continue
+
+                  delete_index = trade_number - 1
+                  if 0 <= delete_index < len(trades):
+                        removed_trade = trades.pop(delete_index)
+                        print(f"Deleted trade: {removed_trade[0]}")
+                  else:
+                        print("Invalid trade number.")
+
+      elif choice == "4":
             print("Goodbye.")
             break
       else:
