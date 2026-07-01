@@ -11,7 +11,8 @@ while True:
       print("2. View Trades")
       print("3. Delete Trade")
       print("4. Edit Trade")
-      print("5. Quit")
+      print("5. Trading Statistics")
+      print("6. Quit")
 
       choice = input("Choose an option: ")
 
@@ -122,8 +123,49 @@ while True:
                   print("Trade updated successfully.")
             else:
                   print("Invalid trade number.")
+                  
       elif choice == "5":
+            print("Trading Statistics:")
+            if len(trades) == 0:
+                print("No trades to calculate statistics.")  
+            else:
+                  total_trades = len(trades)
+                  wins = 0
+                  losses = 0
+                  breakevens = 0
+                  total_pnl = 0
+                  best_trade = trades[0]
+                  worst_trade = trades[0]
+                  for trade in trades:
+                        pnl = trade[4]
+                        result = trade[5]
+                        total_pnl += pnl
+                        if trade [4] > best_trade[4]:
+                              best_trade = trade
+                        if trade [4] < worst_trade[4]:
+                              worst_trade = trade
+                        if result == "Win":
+                              wins += 1
+                        elif result == "Loss":
+                              losses += 1
+                        else:
+                              breakevens += 1
+
+                  win_rate = (wins / total_trades) * 100
+                  average_pnl = total_pnl / total_trades 
+
+                  print("\nTrading Statistics")
+                  print(f"Total trades: {total_trades}")
+                  print(f"Wins: {wins}")
+                  print(f"Losses: {losses}")
+                  print(f"Break-even trades: {breakevens}")
+                  print(f"Win rate: {win_rate}%")
+                  print(f"Total P/L: {total_pnl}")
+                  print(f"Average P/L: {average_pnl}")
+                  print(f"Best trade: {best_trade[0]} ({best_trade[4]})")
+                  print(f"Worst trade: {worst_trade[0]} ({worst_trade[4]})")
+      elif choice == "6":
             print("Goodbye.")
             break
       else:
-            print("Invalid choice.")
+            print("Invalid choice.") 
