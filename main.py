@@ -8,15 +8,16 @@ valid_directions = ("long", "short")
 while True:
       print("\nAI Trading Journal")
       print("1. Add Trade")
-      print("2.View Trades")
+      print("2. View Trades")
       print("3. Delete Trade")
-      print("4. Quit")
+      print("4. Edit Trade")
+      print("5. Quit")
 
       choice = input("Choose an option: ")
 
       if choice == "1":
             symbol = input("Enter symbol: ") 
-            direction = input("Long or short: ").lower()
+            direction = input("Long or short: ").lower().strip()
 
             if direction not in valid_directions:
                   print("Invalid direction")
@@ -75,6 +76,53 @@ while True:
                         print("Invalid trade number.")
 
       elif choice == "4":
+            if len(trades) == 0:
+                  print("No trades to edit.")
+                  continue
+
+            for i in range(len(trades)):
+                  trade = trades[i]
+                  print(f"{i + 1}. {trade[0]} {trade[1]} P/L: {trade[4]}")
+
+            try:
+                  trade_number = int(input("Which trade number would you like to edit? "))
+            except ValueError:
+                  print("Invalid trade number.")
+                  continue
+
+            edit_index = trade_number - 1
+            if 0 <= edit_index < len(trades):
+                  new_symbol = input("New Instrument: ")
+                  new_direction = input("New direction, long or short: ").lower().strip()
+
+                  if new_direction not in valid_directions:
+                        print("Invalid direction")
+                        continue
+
+                  try:
+                        new_entry = float(input("New entry price: "))
+                        new_exit = float(input("New exit price: "))
+                  except ValueError:
+                        print("Invalid price.")
+                        continue
+
+                  if new_direction == "long":
+                        new_pnl = new_exit - new_entry
+                  else:
+                        new_pnl = new_entry - new_exit
+
+                  if new_pnl > 0:
+                        new_result = "Win"
+                  elif new_pnl < 0:
+                        new_result = "Loss"
+                  else:
+                        new_result = "Break-even"
+
+                  trades[edit_index] = [new_symbol, new_direction, new_entry, new_exit, new_pnl, new_result]
+                  print("Trade updated successfully.")
+            else:
+                  print("Invalid trade number.")
+      elif choice == "5":
             print("Goodbye.")
             break
       else:
