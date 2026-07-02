@@ -144,14 +144,19 @@ while True:
             print("\nTrading Statistics:")
 
             if len(trades) == 0:
-                print("No trades to calculate statistics.")  
-
+                  print("No trades to calculate statistics.")
             else:
                   total_trades = len(trades)
                   wins = 0
                   losses = 0
                   breakevens = 0
                   total_pnl = 0
+                  gross_profit = 0
+                  gross_loss = 0
+                  average_winning_trade = 0
+                  average_losing_trade = 0
+                  profit_factor = 0
+                  expectancy = 0
 
                   best_trade = trades[0]
                   worst_trade = trades[0]
@@ -162,21 +167,27 @@ while True:
 
                         total_pnl += pnl
 
-                        if result == "Win": 
+                        if result == "Win":
                               wins += 1
                         elif result == "Loss":
                               losses += 1
                         else:
                               breakevens += 1
 
-                        if trade [4] > best_trade[4]:
+                        if trade[4] > best_trade[4]:
                               best_trade = trade
 
-                        if trade [4] < worst_trade[4]:
+                        if trade[4] < worst_trade[4]:
                               worst_trade = trade
 
                   win_rate = (wins / total_trades) * 100
-                  average_pnl = total_pnl / total_trades 
+                  average_pnl = total_pnl / total_trades
+                  gross_profit = sum(trade[4] for trade in trades if trade[5] == "Win")
+                  gross_loss = sum(abs(trade[4]) for trade in trades if trade[5] == "Loss")
+                  average_winning_trade = gross_profit / wins if wins > 0 else 0
+                  average_losing_trade = gross_loss / losses if losses > 0 else 0
+                  profit_factor = gross_profit / abs(gross_loss) if gross_loss < 0 else float('inf')
+                  expectancy = average_pnl
 
                   print("\nTrading Statistics")
                   print(f"Total trades: {total_trades}")
@@ -184,10 +195,17 @@ while True:
                   print(f"Losses: {losses}")
                   print(f"Break-even trades: {breakevens}")
                   print(f"Win rate: {win_rate}%")
-                  print(f"Total P/L: {total_pnl}")
-                  print(f"Average P/L: {average_pnl}")
+                  print(f"Total P/L: {total_pnl} pts")
+                  print(f"Average P/L: {average_pnl:.2f} pts")
                   print(f"Best trade: {best_trade[0]} ({best_trade[4]})")
                   print(f"Worst trade: {worst_trade[0]} ({worst_trade[4]})")
+                  print(f"Gross profit: {gross_profit:.2f}")
+                  print(f"Gross loss: {gross_loss:.2f}")
+                  print(f"Average winning trade: {average_winning_trade:.2f}")
+                  print(f"Average losing trade: {average_losing_trade:.2f}")
+                  print(f"Profit factor: {profit_factor:.2f}")
+                  print(f"Expectancy: {expectancy:.2f}")
+
       elif choice == "6":
             print("Goodbye.")
             break
