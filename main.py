@@ -1,9 +1,18 @@
+import json
 
+valid_directions = ("long", "short")
 
+def load_trades():
+      try:
+            with open("data/trades.json", "r") as file:
+                  return json.load(file)
+      except FileNotFoundError:
+            return []
 
-trades = []
+def save_trades(trades):
+      with open("data/trades.json", "w") as file:
+            json.dump(trades, file, indent=4)
 
-valid_directions = ("long", "short") 
 
 def show_menu():
       print("\nAI Trading Journal")
@@ -12,14 +21,16 @@ def show_menu():
       print("3. Delete Trade")
       print("4. Edit Trade")
       print("5. Trading Statistics")
-      print("6. Quit")
+      print("6. Search Trades")
+      print("7. Save Trades")
+      print("8. Quit")
 
-def calculate_pnl(direction, entry, exit_price): 
-       if direction == "long":
-             return exit_price - entry
-       else:
-               return entry - exit_price
-      
+def calculate_pnl(direction, entry, exit_price):
+      if direction == "long":
+            return exit_price - entry
+      else:
+            return entry - exit_price
+
 def calculate_result(pnl):
       if pnl > 0:
             return "Win"
@@ -27,10 +38,11 @@ def calculate_result(pnl):
             return "Loss"
       else:
             return "Break-even"
-      
+
+trades = load_trades()
+
 while True:
       show_menu()
-
       choice = input("Choose an option: ").strip()
 
       if choice == "1":
@@ -186,7 +198,12 @@ while True:
                   gross_loss = sum(abs(trade[4]) for trade in trades if trade[5] == "Loss")
                   average_winning_trade = gross_profit / wins if wins > 0 else 0
                   average_losing_trade = gross_loss / losses if losses > 0 else 0
-                  profit_factor = gross_profit / abs(gross_loss) if gross_loss < 0 else float('inf')
+
+                  if gross_loss > 0:
+                        profit_factor = gross_profit / gross_loss
+                  else:
+                        profit_factor = None
+
                   expectancy = average_pnl
 
                   print("\nTrading Statistics")
@@ -194,19 +211,53 @@ while True:
                   print(f"Wins: {wins}")
                   print(f"Losses: {losses}")
                   print(f"Break-even trades: {breakevens}")
-                  print(f"Win rate: {win_rate}%")
-                  print(f"Total P/L: {total_pnl} pts")
+                  print(f"Win rate: {win_rate:.2f}%")
+                  print(f"Total P/L: {total_pnl:,.2f} pts")
                   print(f"Average P/L: {average_pnl:.2f} pts")
-                  print(f"Best trade: {best_trade[0]} ({best_trade[4]})")
-                  print(f"Worst trade: {worst_trade[0]} ({worst_trade[4]})")
-                  print(f"Gross profit: {gross_profit:.2f}")
-                  print(f"Gross loss: {gross_loss:.2f}")
-                  print(f"Average winning trade: {average_winning_trade:.2f}")
-                  print(f"Average losing trade: {average_losing_trade:.2f}")
-                  print(f"Profit factor: {profit_factor:.2f}")
-                  print(f"Expectancy: {expectancy:.2f}")
+                  print(f"Best trade: {best_trade[0]} ({best_trade[4]:.2f} pts)")
+                  print(f"Worst trade: {worst_trade[0]} ({worst_trade[4]:.2f} pts)")
+                  print(f"Gross profit: {gross_profit:,.2f} pts")
+                  print(f"Gross loss: {gross_loss:,.2f} pts")
+                  print(f"Average winning trade: {average_winning_trade:,.2f} pts")
+                  print(f"Average losing trade: {average_losing_trade:,.2f} pts")
+
+                  if profit_factor is None:
+                        print("Profit factor: N/A (no losing trades)")
+                  else:
+                        print(f"Profit factor: {profit_factor:.2f}")
+
+            
+                  print(f"Expectancy: {expectancy:.2f} pts")
 
       elif choice == "6":
+            if len(trades) == 0: 
+                  print("No trades to search")
+            else:
+                  search_symbol = input("Enter symbol to search: ").strip()
+                  found = False
+
+                  for i in range (len(trades)): 
+                        trade =trades [i]
+
+                        if trade[0].lower().strip() == search_symbol:
+                              print(f"\nTrade #{i + 1}")
+                              print(f"symbol: {trade[0]}")
+                              print(f"Direction: {trade[1]}")
+                              print(f"Entry: {trade[2]}")
+                              print(f"Exit: {trade[3]}")
+                              print(f"P/L: {trade[4]}")
+                              print(f"Result: {trade[5]}")
+
+                              found = True
+
+                  if found == False:
+                        print("No matching trades found.")
+
+      elif choice == "7":
+            save_trades(trades)
+            print("Trades saved.")
+
+      elif choice == "8":
             print("Goodbye.")
             break
       else:
