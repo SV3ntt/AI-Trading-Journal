@@ -45,7 +45,7 @@ while True:
       choice = input("Choose an option: ").strip()
 
       if choice == "1":
-            symbol = input("Enter symbol: ") 
+            symbol = input("Enter symbol ").lower().strip()
             direction = input("Long or short: ").lower().strip()
 
             if direction not in valid_directions:
@@ -58,6 +58,11 @@ while True:
                   print ("Invalid price.")
                   continue
       
+            setup = input("Enter setup: ").strip()
+            session = input("Enter session: ").strip()
+            notes = input("Enter notes: ").strip()
+            mistake = input("Enter mistake: ").strip()
+
             pnl = calculate_pnl(direction, entry, exit_price)
             result = calculate_result(pnl)
       
@@ -67,9 +72,14 @@ while True:
                   "entry": entry,
                   "exit": exit_price,
                   "pnl": pnl,
-                  "result": result  
+                  "result": result,
+                  "setup": setup,
+                  "session": session,
+                  "notes": notes,
+                  "mistake": mistake
             }
             trades.append(trade)
+            save_trades(trades)
 
             print("Trade added.")
 
@@ -105,6 +115,8 @@ while True:
 
                   if 0 <= delete_index < len(trades):
                         removed_trade = trades.pop(delete_index)
+                        save_trades(trades)
+
                         print(f"Deleted trade: {removed_trade['symbol']}")
                   else:
                         print("Invalid trade number.")
@@ -152,6 +164,8 @@ while True:
                         "pnl": new_pnl,
                         "result": new_result
                   }
+
+                  save_trades(trades)
 
                   print ("Trade updated successfully.")
             else:
@@ -238,7 +252,7 @@ while True:
             if len(trades) == 0: 
                   print("No trades to search")
             else:
-                  search_symbol = input("Enter symbol to search: ").strip()
+                  search_symbol = input("Enter symbol to search: ").lower().strip()
                   found = False
 
                   for i in range (len(trades)): 
