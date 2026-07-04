@@ -96,6 +96,10 @@ while True:
                         print(f"Exit: {trade['exit']}")
                         print(f"P/L: {trade['pnl']}")
                         print(f"Result: {trade['result']}")
+                        print(f"Setup: {trade.get('setup', 'N/A')}")
+                        print(f"Session: {trade.get('session', 'N/A')}")
+                        print(f"Notes: {trade.get('notes', 'N/A')}")
+                        print(f"Mistake: {trade.get('mistake', 'N/A')}")
 
       elif choice == "3":
             if len(trades) == 0:
@@ -153,16 +157,26 @@ while True:
                         print("Invalid price.")
                         continue
 
+                  new_setup = input("New setup: ").strip()
+                  new_session = input("New session: ").strip()
+                  new_notes = input("New notes: ").strip()
+                  new_mistake = input("New mistake: ").strip()
+
+
                   new_pnl = calculate_pnl(new_direction, new_entry, new_exit)
                   new_result = calculate_result(new_pnl)
 
-                  trades [edit_index] = {
+                  trades[edit_index] = {
                         "symbol": new_symbol,
                         "direction": new_direction,
                         "entry": new_entry,
                         "exit": new_exit,
                         "pnl": new_pnl,
-                        "result": new_result
+                        "result": new_result,
+                        "setup": new_setup,
+                        "session": new_session,
+                        "notes": new_notes,
+                        "mistake": new_mistake
                   }
 
                   save_trades(trades)
@@ -266,6 +280,10 @@ while True:
                               print(f"Exit: {trade['exit']}")
                               print(f"P/L: {trade['pnl']}")
                               print(f"Result: {trade['result']}")
+                              print(f"Setup: {trade.get('setup', 'N/A')}")
+                              print(f"Session: {trade.get('session', 'N/A')}")
+                              print(f"Notes: {trade.get('notes', 'N/A')}")
+                              print(f"Mistake: {trade.get('mistake', 'N/A')}")
 
                               found = True
 

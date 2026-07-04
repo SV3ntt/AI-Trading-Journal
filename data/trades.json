@@ -30,5 +30,17 @@
         "exit": 4000.0,
         "pnl": 1000.0,
         "result": "Win"
+    },
+    {
+        "symbol": "MES",
+        "direction": "long",
+        "entry": 7000.0,
+        "exit": 8500.0,
+        "pnl": 1500.0,
+        "result": "Win",
+        "setup": "IFVG targeting Intraday highs",
+        "session": "New York",
+        "notes": "Found a bullish IFVG and Intraday highs which supported HTF bias as well as US10Y, US2Y, and DXY bearish structure which added to bullish bias for MES1! and MNQ1!",
+        "mistake": "Entered a bit early and almost got stopped out"
     }
 ]
