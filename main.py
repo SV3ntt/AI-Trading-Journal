@@ -13,7 +13,6 @@ def save_trades(trades):
       with open("data/trades.json", "w") as file:
             json.dump(trades, file, indent=4)
 
-
 def show_menu():
       print("\nAI Trading Journal")
       print("1. Add Trade")
@@ -62,7 +61,14 @@ while True:
             pnl = calculate_pnl(direction, entry, exit_price)
             result = calculate_result(pnl)
       
-            trade = [symbol, direction, entry, exit_price, pnl, result]
+            trade = {
+                  "symbol": symbol,
+                  "direction": direction,
+                  "entry": entry,
+                  "exit": exit_price,
+                  "pnl": pnl,
+                  "result": result  
+            }
             trades.append(trade)
 
             print("Trade added.")
@@ -74,12 +80,12 @@ while True:
                   for i in range(len(trades)):
                         trade = trades[i]
                         print(f"\nTrade #{i + 1}")
-                        print(f"Symbol: {trade[0]}")
-                        print(f"Direction: {trade[1]}")
-                        print(f"Entry: {trade[2]}")
-                        print(f"Exit: {trade[3]}")
-                        print(f"P/L: {trade[4]}")
-                        print(f"Result: {trade[5]}")
+                        print(f"Symbol: {trade['symbol']}")
+                        print(f"Direction: {trade['direction']}")
+                        print(f"Entry: {trade['entry']}")
+                        print(f"Exit: {trade['exit']}")
+                        print(f"P/L: {trade['pnl']}")
+                        print(f"Result: {trade['result']}")
 
       elif choice == "3":
             if len(trades) == 0:
@@ -87,7 +93,7 @@ while True:
             else:
                   for i in range(len(trades)):
                         trade = trades[i]
-                        print(f"{i + 1}. {trade[0]} {trade[1]} P/L: {trade[4]}")
+                        print(f"{i + 1}. {trade['symbol']} {trade['direction']} P/L: {trade['pnl']}")
 
                   try:
                         trade_number = int(input("Which trade number would you like to delete? "))
@@ -99,7 +105,7 @@ while True:
 
                   if 0 <= delete_index < len(trades):
                         removed_trade = trades.pop(delete_index)
-                        print(f"Deleted trade: {removed_trade[0]}")
+                        print(f"Deleted trade: {removed_trade['symbol']}")
                   else:
                         print("Invalid trade number.")
 
@@ -110,7 +116,7 @@ while True:
 
             for i in range(len(trades)):
                   trade = trades[i]
-                  print(f"{i + 1}. {trade[0]} {trade[1]} P/L: {trade[4]}")
+                  print(f"{i + 1}. {trade['symbol']} {trade['direction']} P/L: {trade['pnl']}")
 
             try:
                   trade_number = int(input("Which trade number would you like to edit? "))
@@ -138,14 +144,14 @@ while True:
                   new_pnl = calculate_pnl(new_direction, new_entry, new_exit)
                   new_result = calculate_result(new_pnl)
 
-                  trades [edit_index] = [
-                        new_symbol,
-                        new_direction,
-                        new_entry,
-                        new_exit,
-                        new_pnl,
-                        new_result  
-                  ]     
+                  trades [edit_index] = {
+                        "symbol": new_symbol,
+                        "direction": new_direction,
+                        "entry": new_entry,
+                        "exit": new_exit,
+                        "pnl": new_pnl,
+                        "result": new_result
+                  }
 
                   print ("Trade updated successfully.")
             else:
@@ -174,8 +180,8 @@ while True:
                   worst_trade = trades[0]
 
                   for trade in trades:
-                        pnl = trade[4]
-                        result = trade[5]
+                        pnl = trade['pnl']
+                        result = trade['result']
 
                         total_pnl += pnl
 
@@ -186,16 +192,16 @@ while True:
                         else:
                               breakevens += 1
 
-                        if trade[4] > best_trade[4]:
+                        if trade['pnl'] > best_trade['pnl']:
                               best_trade = trade
 
-                        if trade[4] < worst_trade[4]:
+                        if trade['pnl'] < worst_trade['pnl']:
                               worst_trade = trade
 
                   win_rate = (wins / total_trades) * 100
                   average_pnl = total_pnl / total_trades
-                  gross_profit = sum(trade[4] for trade in trades if trade[5] == "Win")
-                  gross_loss = sum(abs(trade[4]) for trade in trades if trade[5] == "Loss")
+                  gross_profit = sum(trade['pnl'] for trade in trades if trade['result'] == "Win")
+                  gross_loss = sum(abs(trade['pnl']) for trade in trades if trade['result'] == "Loss")
                   average_winning_trade = gross_profit / wins if wins > 0 else 0
                   average_losing_trade = gross_loss / losses if losses > 0 else 0
 
@@ -214,8 +220,8 @@ while True:
                   print(f"Win rate: {win_rate:.2f}%")
                   print(f"Total P/L: {total_pnl:,.2f} pts")
                   print(f"Average P/L: {average_pnl:.2f} pts")
-                  print(f"Best trade: {best_trade[0]} ({best_trade[4]:.2f} pts)")
-                  print(f"Worst trade: {worst_trade[0]} ({worst_trade[4]:.2f} pts)")
+                  print(f"Best trade: {best_trade['symbol']} ({best_trade['pnl']:.2f} pts)")
+                  print(f"Worst trade: {worst_trade['symbol']} ({worst_trade['pnl']:.2f} pts)")
                   print(f"Gross profit: {gross_profit:,.2f} pts")
                   print(f"Gross loss: {gross_loss:,.2f} pts")
                   print(f"Average winning trade: {average_winning_trade:,.2f} pts")
@@ -226,7 +232,6 @@ while True:
                   else:
                         print(f"Profit factor: {profit_factor:.2f}")
 
-            
                   print(f"Expectancy: {expectancy:.2f} pts")
 
       elif choice == "6":
@@ -239,14 +244,14 @@ while True:
                   for i in range (len(trades)): 
                         trade =trades [i]
 
-                        if trade[0].lower().strip() == search_symbol:
+                        if trade['symbol'].lower().strip() == search_symbol:
                               print(f"\nTrade #{i + 1}")
-                              print(f"symbol: {trade[0]}")
-                              print(f"Direction: {trade[1]}")
-                              print(f"Entry: {trade[2]}")
-                              print(f"Exit: {trade[3]}")
-                              print(f"P/L: {trade[4]}")
-                              print(f"Result: {trade[5]}")
+                              print(f"symbol: {trade['symbol']}")
+                              print(f"Direction: {trade['direction']}")
+                              print(f"Entry: {trade['entry']}")
+                              print(f"Exit: {trade['exit']}")
+                              print(f"P/L: {trade['pnl']}")
+                              print(f"Result: {trade['result']}")
 
                               found = True
 
