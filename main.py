@@ -263,33 +263,52 @@ while True:
                   print(f"Expectancy: {expectancy:.2f} pts")
 
       elif choice == "6":
-            if len(trades) == 0: 
+            if len(trades) == 0:
                   print("No trades to search")
             else:
-                  search_symbol = input("Enter symbol to search: ").lower().strip()
-                  found = False
+                  print("\nMulti-Filter Search.")
+                  print("Press Enter to skip any filter.")
 
-                  for i in range (len(trades)): 
-                        trade =trades [i]
+            symbol_filter = input("Symbol: ").lower().strip()
+            direction_filter = input ("Direction: ").lower().strip()
+            result_filter = input ("Result: ").lower().strip()
+            setup_filter = input ("setup: ").lower().strip()
+            session_filter = input ("session: ").lower().strip()
 
-                        if trade['symbol'].lower().strip() == search_symbol:
-                              print(f"\nTrade #{i + 1}")
-                              print(f"symbol: {trade['symbol']}")
-                              print(f"Direction: {trade['direction']}")
-                              print(f"Entry: {trade['entry']}")
-                              print(f"Exit: {trade['exit']}")
-                              print(f"P/L: {trade['pnl']}")
-                              print(f"Result: {trade['result']}")
-                              print(f"Setup: {trade.get('setup', 'N/A')}")
-                              print(f"Session: {trade.get('session', 'N/A')}")
-                              print(f"Notes: {trade.get('notes', 'N/A')}")
-                              print(f"Mistake: {trade.get('mistake', 'N/A')}")
+            found = False 
+ 
+            for i in range(len(trades)):
+                  trade = trades[i]
+                  matches = True
 
-                              found = True
+                  if symbol_filter != "" and trade["symbol"].lower().strip() != symbol_filter: 
+                        matches = False 
+                  if direction_filter != "" and trade["direction"].lower().strip() != direction_filter:
+                        matches = False 
+                  if result_filter != "" and trade ["result"].lower().strip() != result_filter: 
+                        matches = False 
+                  if setup_filter != "" and trade["setup"].lower().strip() != setup_filter:
+                        matches = False 
+                  if session_filter != "" and trade ["session"].lower().strip() != session_filter:
+                        matches = False 
 
-                  if found == False:
-                        print("No matching trades found.")
+                  if matches:
+                        print(f"\nTrade #{i + 1}")
+                        print(f"Symbol: {trade['symbol']}")
+                        print(f"Direction: {trade['direction']}")
+                        print(f"Entry: {trade['entry']}")
+                        print(f"Exit: {trade['exit']}")
+                        print(f"P/L: {trade['pnl']}")
+                        print(f"Result: {trade['result']}")
+                        print(f"Setup: {trade.get('setup', 'N/A')}")
+                        print(f"Session: {trade.get('session', 'N/A')}")
+                        print(f"Notes: {trade.get('notes', 'N/A')}")
+                        print(f"Mistake: {trade.get('mistake', 'N/A')}")
+                        found = True
 
+            if found == False: 
+                  print ("No matching trades found")
+                  
       elif choice == "7":
             save_trades(trades)
             print("Trades saved.")
