@@ -20,9 +20,10 @@ def show_menu():
       print("3. Delete Trade")
       print("4. Edit Trade")
       print("5. Trading Statistics")
-      print("6. Search Trades")
-      print("7. Save Trades")
-      print("8. Quit")
+      print("6. Search / Filter Trades")
+      print("7. Filtered Statistics")
+      print("8. Save Trades")
+      print("9. Quit")
 
 def calculate_pnl(direction, entry, exit_price):
       if direction == "long":
@@ -308,12 +309,110 @@ while True:
 
             if found == False: 
                   print ("No matching trades found")
-                  
-      elif choice == "7":
+
+      elif choice == "7": 
+            if len(trades) == 0: 
+                  print("No trades to calculate filtered statictics.")
+            else: 
+                  print("\nFiltered Statistics")
+                  print("Press Enter to skip any filter. ")
+
+                  symbol_filter = input("Symbol: ").lower().strip()
+                  direction_filter = input ("Direction: ").lower().strip()
+                  result_filter = input ("Result: ").lower().strip()
+                  setup_filter = input ("Setup: ").lower().strip()
+                  session_filter = input ("Session: ").lower().strip()
+
+                  filtered_trades = []
+
+                  for trade in trades: 
+                        matches = True 
+                        
+                        if symbol_filter != "" and trade["symbol"].lower().strip() != symbol_filter:
+                              matches = False 
+                        if direction_filter != "" and trade["direction"].lower().strip() != direction_filter: 
+                              matches = False 
+                        if result_filter != ""and trade ["result"].lower().strip() != result_filter: 
+                              matches = False
+                        if setup_filter != "" and trade.get("setup", "").lower().strip() != setup_filter:
+                              matches = False 
+                        if session_filter != "" and trade.get("session", "").lower().strip() != session_filter:
+                              matches = False 
+
+                        if matches: 
+                              filtered_trades.append(trade)
+
+                  if len(filtered_trades) == 0: 
+                        print("No trades matched those filters")
+                  else: 
+                        total_trades = len(filtered_trades)
+                        wins = 0
+                        losses = 0 
+                        breakevens = 0 
+                        total_pnl = 0
+
+                        best_trade = filtered_trades[0]
+                        worst_trade = filtered_trades[0]
+                        
+                        for trade in filtered_trades: 
+                              pnl = trade["pnl"]
+                              result = trade["result"]
+
+                              total_pnl += pnl 
+
+                              if result == "Win": 
+                                    wins += 1
+                              elif result == "Loss":
+                                    losses += 1
+                              else: 
+                                    breakevens += 1
+
+                              if trade["pnl"] > best_trade["pnl"]:
+                                    best_trade = trade 
+                              if trade["pnl"] < worst_trade["pnl"]:
+                                    worst_trade = trade 
+
+                        win_rate = (wins / total_trades) * 100 
+                        average_pnl = total_pnl / total_trades 
+                        gross_profit = sum(trade["pnl"] for trade in filtered_trades if trade["result"] == "Win")
+                        gross_loss = sum(abs(trade["pnl"]) for trade in filtered_trades if trade["result"] == "Loss")
+                        average_winning_trade = gross_profit / wins if wins > 0 else 0 
+                        average_losing_trade = gross_loss / losses if losses > 0 else 0
+
+                        if gross_loss > 0:
+                              profit_factor = gross_profit / gross_loss
+                        else: 
+                              profit_factor = None 
+
+                        expectancy = average_pnl 
+
+                        print("\nFiltered Trading Statistics")
+                        print(f"Total trades: {total_trades}")
+                        print(f"Wins: {wins}")
+                        print(f"Losses: {losses}")
+                        print(f"Break-even trades: {breakevens}")
+                        print(f"Win rate: {win_rate:.2f}%")
+                        print(f"Total P/L: {total_pnl:,.2f} pts")
+                        print(f"Average P/L: {average_pnl:.2f} pts")
+                        print(f"Best trade: {best_trade['symbol']} ({best_trade['pnl']:.2f} pts)")      
+                        print(f"Worst trade: {worst_trade['symbol']} ({worst_trade['pnl']:.2f} pts)")
+                        print(f"Gross profit: {gross_profit:,.2f}pts") 
+                        print(f"Gross loss: {gross_loss:,.2f} pts")
+                        print(f"Average winning trade: {average_winning_trade:,.2f}pts")
+                        print(f"Average losing trade: {average_losing_trade:,.2f} pts")
+
+                        if profit_factor is None: 
+                              print("Profit factor: N/A (no losing trades)")
+                        else: 
+                              print(f"Profit factor: {profit_factor:.2f}")      
+                        
+                        print(f"Expectancy: {expectancy:.2f} pts")
+
+      elif choice == "8":
             save_trades(trades)
             print("Trades saved.")
 
-      elif choice == "8":
+      elif choice == "9":
             print("Goodbye.")
             break
       else:
