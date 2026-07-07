@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 valid_directions = ("long", "short")
 
@@ -38,6 +39,15 @@ def calculate_result(pnl):
             return "Loss"
       else:
             return "Break-even"
+      
+def calculate_duration(entry_time, exit_time):
+      entry_datetime = datetime.strptime(entry_time, "%H:%M")
+      exit_datetime = datetime.strptime(exit_time, "%H:%M")
+
+      duration = exit_datetime - entry_datetime
+      duration_minutes = int(duration.total_seconds() / 60)
+
+      return duration_minutes
 
 trades = load_trades()
 
@@ -58,7 +68,13 @@ while True:
             except ValueError:
                   print ("Invalid price.")
                   continue
-      
+
+            trade_date = input("Trade date (YYYY-MM-DD): ").strip()
+            entry_time = input ("Entry time (HH:MM): ").strip()
+            exit_time = input("Exit time (HH:MM): ").strip()
+
+            duration = calculate_duration(entry_time, exit_time)
+
             setup = input("Enter setup: ").strip()
             session = input("Enter session: ").strip()
             notes = input("Enter notes: ").strip()
@@ -72,8 +88,15 @@ while True:
                   "direction": direction,
                   "entry": entry,
                   "exit": exit_price,
+
+                  "trade_date": trade_date,
+                  "entry_time": entry_time,
+                  "exit_time": exit_time,
+                  "duration": duration,
+
                   "pnl": pnl,
                   "result": result,
+
                   "setup": setup,
                   "session": session,
                   "notes": notes,
@@ -93,8 +116,12 @@ while True:
                         print(f"\nTrade #{i + 1}")
                         print(f"Symbol: {trade['symbol']}")
                         print(f"Direction: {trade['direction']}")
+                        print(f"Date: {trade.get('trade_date', 'N/A')}")
                         print(f"Entry: {trade['entry']}")
                         print(f"Exit: {trade['exit']}")
+                        print(f"Entry Time: {trade.get('entry_time', 'N/A')}")
+                        print(f"Exit Time: {trade.get('exit_time', 'N/A')}")
+                        print(f"Duration: {trade.get('duration', 'N/A')} minutes")
                         print(f"P/L: {trade['pnl']}")
                         print(f"Result: {trade['result']}")
                         print(f"Setup: {trade.get('setup', 'N/A')}")
@@ -158,6 +185,12 @@ while True:
                         print("Invalid price.")
                         continue
 
+                  new_trade_date = input("New trade date (YYYY-MM-DD): ").strip()
+                  new_entry_time = input("New entry time  (HH:MM): ").strip()
+                  new_exit_time = input("New exit time (HH:MM): ").strip()
+
+                  new_duration = calculate_duration(new_entry_time, new_exit_time)
+
                   new_setup = input("New setup: ").strip()
                   new_session = input("New session: ").strip()
                   new_notes = input("New notes: ").strip()
@@ -172,6 +205,10 @@ while True:
                         "direction": new_direction,
                         "entry": new_entry,
                         "exit": new_exit,
+                        "trade_date": new_trade_date,
+                        "entry_time": new_entry_time,
+                        "exit_time": new_exit_time,
+                        "duration": new_duration,
                         "pnl": new_pnl,
                         "result": new_result,
                         "setup": new_setup,
@@ -198,6 +235,12 @@ while True:
                   losses = 0
                   breakevens = 0
                   total_pnl = 0
+                  total_duration = 0
+                  timed_trades = 0 
+                  longest_duration = None
+                  shortest_duration = None
+                  earliest_entry_time = None 
+                  latest_entry_time = None
                   gross_profit = 0
                   gross_loss = 0
                   average_winning_trade = 0
@@ -226,6 +269,31 @@ while True:
 
                         if trade['pnl'] < worst_trade['pnl']:
                               worst_trade = trade
+                        
+                        duration = trade.get("duration")
+
+                        if duration is not None:
+                              total_duration += duration
+                              timed_trades += 1
+
+                              if longest_duration is None or duration > longest_duration:
+                                    longest_duration = duration
+
+                              if shortest_duration is None or duration < shortest_duration:
+                                    shortest_duration = duration
+
+                        entry_time = trade.get("entry_time")
+
+                        if entry_time is not None:
+                              entry_datetime = datetime.strptime(entry_time, "%H:%M")
+
+                              if earliest_entry_time is None or entry_datetime < earliest_entry_time:
+                                    earliest_entry_time = entry_datetime
+
+                              if latest_entry_time is None or entry_datetime > latest_entry_time:
+                                    latest_entry_time = entry_datetime
+                                    
+
 
                   win_rate = (wins / total_trades) * 100
                   average_pnl = total_pnl / total_trades
@@ -241,6 +309,11 @@ while True:
 
                   expectancy = average_pnl
 
+                  if timed_trades > 0: 
+                        average_duration = total_duration / timed_trades 
+                  else: 
+                        average_duration = 0
+
                   print("\nTrading Statistics")
                   print(f"Total trades: {total_trades}")
                   print(f"Wins: {wins}")
@@ -255,6 +328,23 @@ while True:
                   print(f"Gross loss: {gross_loss:,.2f} pts")
                   print(f"Average winning trade: {average_winning_trade:,.2f} pts")
                   print(f"Average losing trade: {average_losing_trade:,.2f} pts")
+                  print(f"Average trade duration: {average_duration:.2f} minutes")
+
+                  if timed_trades > 0: 
+                         print(f"Longest trade duration: {longest_duration} minutes")
+                         print(f"Shortest trade duration: {shortest_duration} minutes")
+
+                  else: 
+                        print("Longest trade duration: N/A")
+                        print("Shortest trade duration: N/A")
+
+                  if earliest_entry_time is not None: 
+                         print(f"Earliest entry time: {earliest_entry_time.strftime('%H:%M')}")
+                         print(f"Latest entry time: {latest_entry_time.strftime('%H:%M')}")
+
+                  else: 
+                        print("Earliest entry time: N/A")
+                        print("Latest entry time: N/A")
 
                   if profit_factor is None:
                         print("Profit factor: N/A (no losing trades)")
@@ -270,35 +360,39 @@ while True:
                   print("\nMulti-Filter Search.")
                   print("Press Enter to skip any filter.")
 
-            symbol_filter = input("Symbol: ").lower().strip()
-            direction_filter = input ("Direction: ").lower().strip()
-            result_filter = input ("Result: ").lower().strip()
-            setup_filter = input ("setup: ").lower().strip()
-            session_filter = input ("session: ").lower().strip()
+                  symbol_filter = input("Symbol: ").lower().strip()
+                  direction_filter = input ("Direction: ").lower().strip()
+                  result_filter = input ("Result: ").lower().strip()
+                  setup_filter = input ("setup: ").lower().strip()
+                  session_filter = input ("session: ").lower().strip()
 
-            found = False 
+                  found = False 
  
             for i in range(len(trades)):
                   trade = trades[i]
                   matches = True
 
-                  if symbol_filter != "" and trade["symbol"].lower().strip() != symbol_filter: 
+                  if symbol_filter != "" and trade.get("symbol", "").lower().strip() != symbol_filter: 
                         matches = False 
-                  if direction_filter != "" and trade["direction"].lower().strip() != direction_filter:
+                  if direction_filter != "" and trade.get("direction", "").lower().strip() != direction_filter:
                         matches = False 
-                  if result_filter != "" and trade ["result"].lower().strip() != result_filter: 
+                  if result_filter != "" and trade.get("result", "").lower().strip() != result_filter: 
                         matches = False 
-                  if setup_filter != "" and trade["setup"].lower().strip() != setup_filter:
+                  if setup_filter != "" and trade.get("setup", "").lower().strip() != setup_filter:
                         matches = False 
-                  if session_filter != "" and trade ["session"].lower().strip() != session_filter:
+                  if session_filter != "" and trade.get("session", "").lower().strip() != session_filter:
                         matches = False 
 
                   if matches:
                         print(f"\nTrade #{i + 1}")
                         print(f"Symbol: {trade['symbol']}")
                         print(f"Direction: {trade['direction']}")
+                        print(f"Date: {trade.get('trade_date', 'N/A')}")
                         print(f"Entry: {trade['entry']}")
                         print(f"Exit: {trade['exit']}")
+                        print(f"Entry Time: {trade.get('entry_time', 'N/A')}")
+                        print(f"Exit Time: {trade.get('exit_time', 'N/A')}")
+                        print(f"Duration: {trade.get('duration', 'N/A')} minutes")
                         print(f"P/L: {trade['pnl']}")
                         print(f"Result: {trade['result']}")
                         print(f"Setup: {trade.get('setup', 'N/A')}")
@@ -417,3 +511,4 @@ while True:
             break
       else:
             print("Invalid choice.") 
+            
