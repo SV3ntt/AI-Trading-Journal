@@ -44,6 +44,9 @@ def calculate_duration(entry_time, exit_time):
       entry_datetime = datetime.strptime(entry_time, "%H:%M")
       exit_datetime = datetime.strptime(exit_time, "%H:%M")
 
+      if exit_datetime < entry_datetime:
+            exit_datetime = exit_datetime.replace(day = exit_datetime.day + 1)
+
       duration = exit_datetime - entry_datetime
       duration_minutes = int(duration.total_seconds() / 60)
 
