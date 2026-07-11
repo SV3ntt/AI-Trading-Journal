@@ -70,6 +70,11 @@ while True:
 
       if choice == "1":
             symbol = input("Enter symbol: ").lower().strip()
+
+            if symbol == "":
+                  print("Symbol cannot be blank.")
+                  continue
+
             direction = input("Long or short: ").lower().strip()
 
             if direction not in valid_directions:
@@ -142,9 +147,27 @@ while True:
             if len(trades) == 0:
                   print("No trades yet.")
             else:
+                  print("\nTrades:")
                   for i in range(len(trades)):
                         trade = trades[i]
-                        print(f"\nTrade #{i + 1}")
+                        print(f"  {i + 1}. {trade['symbol'].upper()} | {trade.get('trade_date', 'N/A')} | {trade['direction']} | {trade['result']} | {trade['points_pnl']:,.2f} pts | ${trade.get('dollar_pnl', 0):,.2f}")
+
+                  view_input = input("\nEnter a trade number for full details, or press Enter to go back: ").strip()
+
+                  if view_input == "":
+                        continue
+
+                  try:
+                        view_number = int(view_input)
+                  except ValueError:
+                        print("Invalid trade number.")
+                        continue
+
+                  view_index = view_number - 1
+
+                  if 0 <= view_index < len(trades):
+                        trade = trades[view_index]
+                        print(f"\nTrade #{view_number}")
                         print(f"Symbol: {trade['symbol']}")
                         print(f"Direction: {trade['direction']}")
                         print(f"Date: {trade.get('trade_date', 'N/A')}")
@@ -154,20 +177,22 @@ while True:
 
                         point_value = trade.get("point_value")
                         if point_value is None:
-                              print ("Point Value N/A")
-                        else: 
+                              print("Point Value: N/A")
+                        else:
                               print(f"Point Value: ${point_value:,.2f}")
-                        
+
                         print(f"Entry Time: {trade.get('entry_time', 'N/A')}")
                         print(f"Exit Time: {trade.get('exit_time', 'N/A')}")
                         print(f"Duration: {trade.get('duration', 'N/A')} minutes")
-                        print(f"Points P/L: {trade['points_pnl']}")
+                        print(f"Points P/L: {trade['points_pnl']:,.2f} pts")
                         print(f"Dollar P/L: ${trade.get('dollar_pnl', 0):,.2f}")
                         print(f"Result: {trade['result']}")
                         print(f"Setup: {trade.get('setup', 'N/A')}")
                         print(f"Session: {trade.get('session', 'N/A')}")
                         print(f"Notes: {trade.get('notes', 'N/A')}")
                         print(f"Mistake: {trade.get('mistake', 'N/A')}")
+                  else:
+                        print("Invalid trade number.")
 
       elif choice == "3":
             if len(trades) == 0:
@@ -186,10 +211,14 @@ while True:
                   delete_index = trade_number - 1
 
                   if 0 <= delete_index < len(trades):
-                        removed_trade = trades.pop(delete_index)
-                        save_trades(trades)
-
-                        print(f"Deleted trade: {removed_trade['symbol']}")
+                        trade_to_delete = trades[delete_index]
+                        confirm = input(f"Are you sure you want to delete {trade_to_delete['symbol']} ({trade_to_delete['result']}, {trade_to_delete['points_pnl']:,.2f} pts)? (yes/no): ").lower().strip()
+                        if confirm == "yes":
+                              removed_trade = trades.pop(delete_index)
+                              save_trades(trades)
+                              print(f"Deleted trade: {removed_trade['symbol']}")
+                        else:
+                              print("Delete cancelled.")
                   else:
                         print("Invalid trade number.")
 
@@ -211,43 +240,75 @@ while True:
             edit_index = trade_number - 1
 
             if 0 <= edit_index < len(trades):
-                  new_symbol = input("New Instrument: ").lower().strip()
-                  new_direction = input("New direction, long or short: ").lower().strip()
+                  current = trades[edit_index]
 
-                  if new_direction not in valid_directions:
-                        print("Invalid direction")
+                  symbol_input = input(f"Symbol (current: {current['symbol']}): ").lower().strip()
+                  new_symbol = symbol_input if symbol_input != "" else current["symbol"]
+
+                  direction_input = input(f"Direction (current: {current['direction']}): ").lower().strip()
+                  if direction_input == "":
+                        new_direction = current["direction"]
+                  elif direction_input not in valid_directions:
+                        print("Invalid direction.")
                         continue
+                  else:
+                        new_direction = direction_input
 
                   try:
-                        new_entry = float(input("New entry price: "))
-                        new_exit = float(input("New exit price: "))
-                        new_contracts = int(input("New number of contracts: ")) 
-                        new_point_value = float(input("New point value: "))
-                        
+                        entry_input = input(f"Entry price (current: {current['entry']}): ").strip()
+                        new_entry = float(entry_input) if entry_input != "" else current["entry"]
+
+                        exit_input = input(f"Exit price (current: {current['exit']}): ").strip()
+                        new_exit = float(exit_input) if exit_input != "" else current["exit"]
+
+                        contracts_input = input(f"Contracts (current: {current.get('contracts', 'N/A')}): ").strip()
+                        new_contracts = int(contracts_input) if contracts_input != "" else current.get("contracts", 1)
+
+                        point_value_input = input(f"Point value (current: {current.get('point_value', 'N/A')}): ").strip()
+                        new_point_value = float(point_value_input) if point_value_input != "" else current.get("point_value", 1.0)
+
                   except ValueError:
                         print("Invalid price, contracts, or point value.")
                         continue
 
                   try:
-                        new_trade_date = input("New trade date (YYYY-MM-DD): ").strip()
-                        datetime.strptime(new_trade_date, "%Y-%m-%d")
+                        date_input = input(f"Trade date (current: {current.get('trade_date', 'N/A')}): ").strip()
+                        if date_input == "":
+                              new_trade_date = current.get("trade_date", "")
+                        else:
+                              datetime.strptime(date_input, "%Y-%m-%d")
+                              new_trade_date = date_input
                   except ValueError:
                         print("Invalid date. Please use YYYY-MM-DD format.")
                         continue
 
                   try:
-                        new_entry_time = input("New entry time (HH:MM): ").strip()
-                        new_exit_time = input("New exit time (HH:MM): ").strip()
-                        new_duration = calculate_duration(new_entry_time, new_exit_time)
+                        entry_time_input = input(f"Entry time (current: {current.get('entry_time', 'N/A')}): ").strip()
+                        new_entry_time = entry_time_input if entry_time_input != "" else current.get("entry_time", "")
+
+                        exit_time_input = input(f"Exit time (current: {current.get('exit_time', 'N/A')}): ").strip()
+                        new_exit_time = exit_time_input if exit_time_input != "" else current.get("exit_time", "")
+
+                        if new_entry_time and new_exit_time:
+                              new_duration = calculate_duration(new_entry_time, new_exit_time)
+                        else:
+                              new_duration = current.get("duration", None)
 
                   except ValueError:
                         print("Invalid time format. Please use HH:MM.")
                         continue
 
-                  new_setup = input("New setup: ").strip()
-                  new_session = input("New session: ").strip()
-                  new_notes = input("New notes: ").strip()
-                  new_mistake = input("New mistake: ").strip()
+                  setup_input = input(f"Setup (current: {current.get('setup', 'N/A')}): ").strip()
+                  new_setup = setup_input if setup_input != "" else current.get("setup", "")
+
+                  session_input = input(f"Session (current: {current.get('session', 'N/A')}): ").strip()
+                  new_session = session_input if session_input != "" else current.get("session", "")
+
+                  notes_input = input(f"Notes (current: {current.get('notes', 'N/A')}): ").strip()
+                  new_notes = notes_input if notes_input != "" else current.get("notes", "")
+
+                  mistake_input = input(f"Mistake (current: {current.get('mistake', 'N/A')}): ").strip()
+                  new_mistake = mistake_input if mistake_input != "" else current.get("mistake", "")
 
 
                   new_points_pnl = calculate_points_pnl( 
@@ -503,6 +564,7 @@ while True:
                   session_filter = input ("session: ").lower().strip()
 
                   found = False
+                  match_count = 0
 
                   for i in range(len(trades)):
                         trade = trades[i]
@@ -543,9 +605,12 @@ while True:
                               print(f"Notes: {trade.get('notes', 'N/A')}")
                               print(f"Mistake: {trade.get('mistake', 'N/A')}")
                               found = True
+                              match_count += 1
 
                   if not found:
                         print("No matching trades found")
+                  else:
+                        print(f"\n{match_count} trade(s) found.")
 
       elif choice == "7": 
             if len(trades) == 0: 
