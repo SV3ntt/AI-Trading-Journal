@@ -74,5 +74,24 @@
         "session": "",
         "notes": "",
         "mistake": ""
+    },
+    {
+        "symbol": "mnq",
+        "direction": "long",
+        "entry": 7560.5,
+        "exit": 7555.75,
+        "contracts": 6,
+        "point_value": 2.0,
+        "trade_date": "2026-06-12",
+        "entry_time": "10:03",
+        "exit_time": "10:50",
+        "duration": 47,
+        "points_pnl": -4.75,
+        "dollar_pnl": -57.0,
+        "result": "Loss",
+        "setup": "",
+        "session": "",
+        "notes": "",
+        "mistake": ""
     }
 ]

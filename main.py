@@ -21,17 +21,34 @@ def save_trades(trades):
       with open("data/trades.json", "w") as file:
             json.dump(trades, file, indent=4)
 
+def load_account(): 
+      try: 
+            with open("data/account.json", "r") as file: 
+                  account = json.load(file) 
+                  return account
+      except FileNotFoundError:
+            return None
+      except json.JSONDecodeError:
+            print("Warning: account.json is corrupted.")
+            return None
+      
+def save_account(account):
+      with open("data/account.json", "w") as file: 
+            json.dump(account, file, indent=4)
+
 def show_menu():
       print("\nAI Trading Journal")
-      print("1. Add Trade")
-      print("2. View Trades")
-      print("3. Delete Trade")
-      print("4. Edit Trade")
-      print("5. Trading Statistics")
-      print("6. Search / Filter Trades")
-      print("7. Filtered Statistics")
-      print("8. Save Trades")
-      print("9. Quit")
+      print("1. Account Status")
+      print("2. Edit Account")
+      print("3. Add Trade")
+      print("4. View Trades")
+      print("5. Delete Trade")
+      print("6. Edit Trade")
+      print("7. Trading Statistics")
+      print("8. Search / Filter Trades")
+      print("9. Filtered Statistics")
+      print("10. Save Trades")
+      print("11. Quit")
 
 def calculate_points_pnl(direction, entry, exit_price):
       if direction == "long":
@@ -63,12 +80,187 @@ def calculate_duration(entry_time, exit_time):
       return duration_minutes
 
 trades = load_trades()
+account = load_account()
 
 while True:
       show_menu()
       choice = input("Choose an option: ").strip()
 
       if choice == "1":
+            if account is None: 
+                  print("\nNo account has been created yet. Please create an account first.")
+            
+                  account_name = input("Enter account name: ").strip()
+
+                  if account_name == "":
+                        print("Account name cannot be blank.")
+                        continue
+
+                  print("\nAccount Types")
+                  print("1. Personal")
+                  print("2. Evaluation")
+                  print("3. Funded")
+
+                  account_type_choice = input ("Choose account type: ").strip()
+
+                  if account_type_choice == "1":
+                        account_type = "Personal"
+                  elif account_type_choice == "2":
+                        account_type = "Evaluation"
+                  elif account_type_choice == "3":
+                        account_type = "Funded"
+                  else:
+                        print("Invalid account type")
+                        continue
+
+                  try:
+                        starting_balance = float(input("Enter starting balance: $").strip())     
+                  except ValueError:
+                        print("Invalid starting balance.")
+                        continue
+
+                  if starting_balance < 0:
+                        print(f"Starting balance must be greater than or equal to $0.")
+                        continue
+
+                  account = {
+                        "name": account_name,
+                        "type": account_type,
+                        "starting_balance": starting_balance,
+                        "high_water_mark": starting_balance
+                  }
+                  save_account(account)
+                  print(f"Account '{account_name}' created successfully.")
+
+            total_dollar_pnl = sum(
+                  trade.get("dollar_pnl", 0)
+                  for trade in trades
+            )
+
+            starting_balance = account["starting_balance"]
+            current_balance = starting_balance + total_dollar_pnl
+            net_profit = total_dollar_pnl
+            growth_percentage = (net_profit / starting_balance) * 100 if starting_balance != 0 else 0
+
+            high_water_mark = account.get("high_water_mark", starting_balance)
+
+            if current_balance > high_water_mark:
+                  high_water_mark = current_balance
+                  account["high_water_mark"] = high_water_mark
+                  save_account(account)
+                  
+            drawdown = current_balance - high_water_mark
+
+            if high_water_mark > 0: 
+                  drawdown_percentage = (drawdown / high_water_mark) * 100
+            else:
+                  drawdown_percentage = 0
+
+            print("\n=========================")
+            print("ACCOUNT STATUS")
+            print("=========================")
+            print(f"Account Name: {account['name']}")
+            print(f"Account Type: {account['type']}")
+            print(f"Starting Balance: ${starting_balance:,.2f}")
+            print(f"Current Balance: ${current_balance:,.2f}")
+            print(f"High Water Mark: ${high_water_mark:,.2f}")
+
+            if net_profit > 0:
+                  print(f"Net Profit: ${net_profit:,.2f}")
+                  print(f"Growth: {growth_percentage:.2f}%")
+            elif net_profit < 0:
+                  print(f"Net Loss: -${abs(net_profit):,.2f}")
+                  print(f"Growth: {growth_percentage:.2f}%")
+            else:
+                  print("Net P/L: $0.00")
+                  print("Growth: 0.00%")
+            
+            if drawdown < 0:
+                  print(f"Drawdown: ${drawdown:,.2f}")
+                  print(f"Drawdown Percentage: {drawdown_percentage:.2f}%")
+            else: 
+                  print("Drawdown: $0.00")
+                  print("Drawdown Percentage: 0.00%")
+                  
+
+      elif choice == "2":
+            if account is None:
+                  print("\nNo account has been created yet. Please create an account first.")
+                  continue
+                  
+            print("\nEDIT ACCOUNT")
+            print("Press Enter to keep current value.")
+
+            new_account_name = input(
+                  f"Account Name (current: {account['name']}): " 
+            ).strip()
+
+            if new_account_name != "":
+                  account["name"] = new_account_name
+
+            print(f"\nCurrent account type: {account['type']}")  
+            print("1. Personal")
+            print("2. Evaluation")
+            print("3. Funded")
+            print("Press Enter to keep current account type.")
+
+            account_type_choice = input(
+                  "Choose new account type: "
+                  ).strip()
+            if account_type_choice == "":
+                  new_account_type = account["type"]
+            elif account_type_choice == "1":
+                  new_account_type = "Personal"
+            elif account_type_choice == "2":
+                  new_account_type = "Evaluation"
+            elif account_type_choice == "3":
+                  new_account_type = "Funded"
+            else:
+                  print("Invalid account type.")
+                  continue
+
+            new_starting_balance_input = input(
+                  f"Starting Balance (current: ${account['starting_balance']:,.2f}): $"
+            ).strip()
+            if new_starting_balance_input == "":
+                  new_starting_balance = account["starting_balance"]
+            else: 
+                  try:
+                        new_starting_balance = float(
+                              new_starting_balance_input    
+                        )
+                  except ValueError:
+                        print("Invalid starting balance.")
+                        continue
+                  if new_starting_balance < 0:
+                        print("Starting balance must be greater than or equal to $0.")
+                        continue
+
+            old_starting_balance = account["starting_balance"]
+
+            account["name"] = new_account_name
+            account["type"] = new_account_type
+            account["starting_balance"] = new_starting_balance
+
+            if new_starting_balance != old_starting_balance:
+                  total_dollar_pnl = sum(
+                        trade.get("dollar_pnl", 0)
+                        for trade in trades
+                  )
+
+                  recalculated_balance = (
+                        new_starting_balance + total_dollar_pnl
+                  )
+
+                  account["high_water_mark"] = max(
+                        new_starting_balance, 
+                        recalculated_balance
+                  )
+
+            save_account(account)
+            print("Account updated successfully.")
+
+      elif choice == "3":
             symbol = input("Enter symbol: ").lower().strip()
 
             if symbol == "":
@@ -91,7 +283,7 @@ while True:
                   continue
 
             try:
-                  trade_date = input("Trade date (YYYY-MM-DD): ").strip()
+                  trade_date = input("Trade date (YYYY-MM-DD): ").strip().replace(" ", "-")
                   datetime.strptime(trade_date, "%Y-%m-%d")
             except ValueError:
                   print("Invalid date. Please use YYYY-MM-DD format.")
@@ -143,7 +335,7 @@ while True:
 
             print("Trade added.")
 
-      elif choice == "2":
+      elif choice == "4":
             if len(trades) == 0:
                   print("No trades yet.")
             else:
@@ -194,7 +386,7 @@ while True:
                   else:
                         print("Invalid trade number.")
 
-      elif choice == "3":
+      elif choice == "5":
             if len(trades) == 0:
                   print("No trades to delete.")
             else:
@@ -222,7 +414,7 @@ while True:
                   else:
                         print("Invalid trade number.")
 
-      elif choice == "4":
+      elif choice == "6":
             if len(trades) == 0:
                   print("No trades to edit.")
                   continue
@@ -272,8 +464,8 @@ while True:
                         continue
 
                   try:
-                        date_input = input(f"Trade date (current: {current.get('trade_date', 'N/A')}): ").strip()
-                        if date_input == "":
+                        date_input = input(f"Trade date (current: {current.get('trade_date', 'N/A')}): ").strip().replace(" ", "-")
+                        if date_input == "" or date_input == "-":
                               new_trade_date = current.get("trade_date", "")
                         else:
                               datetime.strptime(date_input, "%Y-%m-%d")
@@ -353,7 +545,7 @@ while True:
                   print("Invalid trade number.")
                   
                   
-      elif choice == "5":
+      elif choice == "7":
             if len(trades) == 0:
                   print("No trades to calculate statistics.")
             else:
@@ -550,7 +742,7 @@ while True:
                         print("Earliest entry time: N/A")
                         print("Latest entry time: N/A")
 
-      elif choice == "6":
+      elif choice == "8":
             if len(trades) == 0:
                   print("No trades to search")
             else:
@@ -612,7 +804,7 @@ while True:
                   else:
                         print(f"\n{match_count} trade(s) found.")
 
-      elif choice == "7": 
+      elif choice == "9": 
             if len(trades) == 0: 
                   print("No trades to calculate filtered statistics.")
             else: 
@@ -833,11 +1025,11 @@ while True:
                               print("Earliest entry time: N/A")
                               print("Latest entry time: N/A")
 
-      elif choice == "8":
+      elif choice == "10":
             save_trades(trades)
             print("Trades saved.")
 
-      elif choice == "9":
+      elif choice == "11":
             print("Goodbye.")
             break
       else:
