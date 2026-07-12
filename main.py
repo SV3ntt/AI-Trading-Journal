@@ -339,7 +339,7 @@ while True:
             if len(trades) == 0:
                   print("No trades yet.")
             else:
-                  print("\nTrades:")
+                  print(f"\nTrades ({len(trades)} total):")
                   for i in range(len(trades)):
                         trade = trades[i]
                         print(f"  {i + 1}. {trade['symbol'].upper()} | {trade.get('trade_date', 'N/A')} | {trade['direction']} | {trade['result']} | {trade['points_pnl']:,.2f} pts | ${trade.get('dollar_pnl', 0):,.2f}")
@@ -684,11 +684,11 @@ while True:
                   print(f"Total points P/L: {total_points_pnl:,.2f} pts")
                   print(f"Average points P/L: {average_points_pnl:.2f} pts")
                   print(
-                        f"Best Points Trade: {best_points_trade['symbol']} "
+                        f"Best Points Trade: #{trades.index(best_points_trade) + 1} {best_points_trade['symbol']} "
                         f"({best_points_trade['points_pnl']:.2f} pts)"
                   )
                   print(
-                        f"Worst Points Trade: {worst_points_trade['symbol']} "
+                        f"Worst Points Trade: #{trades.index(worst_points_trade) + 1} {worst_points_trade['symbol']} "
                         f"({worst_points_trade['points_pnl']:.2f} pts)"
                   )
                   print(f"Gross Points Profit: {gross_points_profit:,.2f} pts")
@@ -707,11 +707,11 @@ while True:
                   print(f"Total dollar P/L: ${total_dollar_pnl:,.2f}")
                   print(f"Average dollar P/L: ${average_dollar_pnl:,.2f}")
                   print(
-                        f"Best Dollar Trade: {best_dollar_trade['symbol']} "
+                        f"Best Dollar Trade: #{trades.index(best_dollar_trade) + 1} {best_dollar_trade['symbol']} "
                         f"(${best_dollar_trade.get('dollar_pnl', 0):,.2f})"
                   )
                   print(
-                        f"Worst Dollar Trade: {worst_dollar_trade['symbol']} "
+                        f"Worst Dollar Trade: #{trades.index(worst_dollar_trade) + 1} {worst_dollar_trade['symbol']} "
                         f"(${worst_dollar_trade.get('dollar_pnl', 0):,.2f})"
                   )
                   print(f"Gross Dollar Profit: ${gross_dollar_profit:,.2f}")
@@ -962,11 +962,11 @@ while True:
                         print(f"Total points P/L: {total_points_pnl:,.2f} pts")
                         print(f"Average points P/L: {average_points_pnl:.2f} pts")
                         print(
-                              f"Best Points Trade: {best_points_trade['symbol']} "
+                              f"Best Points Trade: #{trades.index(best_points_trade) + 1} {best_points_trade['symbol']} "
                               f"({best_points_trade['points_pnl']:.2f} pts)"
                         )
                         print(
-                              f"Worst Points Trade: {worst_points_trade['symbol']} "
+                              f"Worst Points Trade: #{trades.index(worst_points_trade) + 1} {worst_points_trade['symbol']} "
                               f"({worst_points_trade['points_pnl']:.2f} pts)"
                         )
                         print(f"Gross Points Profit: {gross_profit:,.2f} pts")
@@ -985,11 +985,11 @@ while True:
                         print(f"Total dollar P/L: ${total_dollar_pnl:,.2f}")
                         print(f"Average dollar P/L: ${average_dollar_pnl:,.2f}")
                         print(
-                              f"Best Dollar Trade: {best_dollar_trade['symbol']} "
+                              f"Best Dollar Trade: #{trades.index(best_dollar_trade) + 1} {best_dollar_trade['symbol']} "
                               f"(${best_dollar_trade.get('dollar_pnl', 0):,.2f})"
                         )
                         print(
-                              f"Worst Dollar Trade: {worst_dollar_trade['symbol']} "
+                              f"Worst Dollar Trade: #{trades.index(worst_dollar_trade) + 1} {worst_dollar_trade['symbol']} "
                               f"(${worst_dollar_trade.get('dollar_pnl', 0):,.2f})"
                         )
                         print(f"Gross Dollar Profit: ${gross_dollar_profit:,.2f}")
