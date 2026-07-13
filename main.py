@@ -57,7 +57,7 @@ def export_trades_to_csv(trades):
             print("No trades to export.")
             return
       
-      filename = "data/trades_export.csv" 
+      filename = f"data/trades_export_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
       
       headers = [
             "Trade Number", 
@@ -89,15 +89,15 @@ def export_trades_to_csv(trades):
                   for i, trade in enumerate(trades):
                         writer.writerow([
                               i + 1,
-                              trade.get("trade_date", ""),
+                              trade.get("trade_date", "").replace("-", " "),
                               trade.get("symbol", "").upper(),
                               trade.get("direction", ""),
-                              trade.get("entry", ""),
-                              trade.get("exit", ""),
+                              round(trade.get("entry", 0), 4),
+                              round(trade.get("exit", 0), 4),
                               trade.get("contracts", ""),
-                              trade.get("point_value", ""),
-                              trade.get("points_pnl", ""),
-                              trade.get("dollar_pnl", ""),
+                              round(trade.get("point_value", 0), 2),
+                              round(trade.get("points_pnl", 0), 2),
+                              round(trade.get("dollar_pnl", 0), 2),
                               trade.get("result", ""),
                               trade.get("entry_time", ""),
                               trade.get("exit_time", ""),
@@ -110,8 +110,8 @@ def export_trades_to_csv(trades):
                   
                   print(f"Trades exported to {filename} successfully.")
             
-      except OSError:
-            print("There was an error exporting the trades")
+      except OSError as e:
+            print(f"Error exporting trades: {e}")
 
 def calculate_points_pnl(direction, entry, exit_price):
       if direction == "long":
@@ -357,7 +357,10 @@ while True:
 
             try:
                   trade_date = input("Trade date (YYYY-MM-DD): ").strip().replace(" ", "-")
-                  datetime.strptime(trade_date, "%Y-%m-%d")
+                  
+                  parsed_date = datetime.strptime(trade_date, "%Y-%m-%d")
+                  trade_date = parsed_date.strftime("%Y-%m-%d")
+
             except ValueError:
                   print("Invalid date. Please use YYYY-MM-DD format.")
                   continue
@@ -551,8 +554,8 @@ while True:
                         if date_input == "" or date_input == "-":
                               new_trade_date = current.get("trade_date", "")
                         else:
-                              datetime.strptime(date_input, "%Y-%m-%d")
-                              new_trade_date = date_input
+                              parsed_date = datetime.strptime(date_input, "%Y-%m-%d")
+                              new_trade_date = parsed_date.strftime("%Y-%m-%d")
                   except ValueError:
                         print("Invalid date. Please use YYYY-MM-DD format.")
                         continue
