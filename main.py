@@ -1,3 +1,4 @@
+import csv
 import json
 from datetime import datetime, timedelta
 
@@ -48,7 +49,69 @@ def show_menu():
       print("8. Search / Filter Trades")
       print("9. Filtered Statistics")
       print("10. Save Trades")
-      print("11. Quit")
+      print("11. Export Trades to CSV")
+      print("12. Quit")
+
+def export_trades_to_csv(trades): 
+      if len(trades) == 0:
+            print("No trades to export.")
+            return
+      
+      filename = "data/trades_export.csv" 
+      
+      headers = [
+            "Trade Number", 
+            "Date",
+            "Symbol",
+            "Direction",
+            "Entry",
+            "Exit",
+            "Contracts",
+            "Point Value",
+            "Points P/L",
+            "Dollar P/L",
+            "Result",
+            "Entry Time",
+            "Exit Time",
+            "Duration (Minutes)",
+            "Setup",
+            "Session",
+            "Notes",
+            "Mistake"
+      ]
+
+      try: 
+            with open(filename, "w", newline="", encoding="utf-8") as file:
+                  writer = csv.writer(file)
+
+                  writer.writerow(headers)
+
+                  for i, trade in enumerate(trades):
+                        writer.writerow([
+                              i + 1,
+                              trade.get("trade_date", ""),
+                              trade.get("symbol", "").upper(),
+                              trade.get("direction", ""),
+                              trade.get("entry", ""),
+                              trade.get("exit", ""),
+                              trade.get("contracts", ""),
+                              trade.get("point_value", ""),
+                              trade.get("points_pnl", ""),
+                              trade.get("dollar_pnl", ""),
+                              trade.get("result", ""),
+                              trade.get("entry_time", ""),
+                              trade.get("exit_time", ""),
+                              trade.get("duration", ""),
+                              trade.get("setup", ""),
+                              trade.get("session", ""),
+                              trade.get("notes", ""),
+                              trade.get("mistake", "")
+                        ])
+                  
+                  print(f"Trades exported to {filename} successfully.")
+            
+      except OSError:
+            print("There was an error exporting the trades")
 
 def calculate_points_pnl(direction, entry, exit_price):
       if direction == "long":
@@ -195,8 +258,8 @@ while True:
                   f"Account Name (current: {account['name']}): " 
             ).strip()
 
-            if new_account_name != "":
-                  account["name"] = new_account_name
+            if new_account_name == "":
+                  new_account_name = account["name"]
 
             print(f"\nCurrent account type: {account['type']}")  
             print("1. Personal")
@@ -280,6 +343,16 @@ while True:
                  
             except ValueError:
                   print ("Invalid price, contracts, or point value.")
+                  continue
+
+            if entry <= 0 or exit_price <= 0:
+                  print("Entry and exit prices must be greater than 0.")
+                  continue
+            if contracts <= 0:
+                  print("Contracts must be greater than 0.")
+                  continue
+            if point_value <= 0:
+                  print("Point value must be greater than 0.")
                   continue
 
             try:
@@ -463,6 +536,16 @@ while True:
                         print("Invalid price, contracts, or point value.")
                         continue
 
+                  if new_entry <= 0 or new_exit <= 0:
+                        print("Entry and exit prices must be greater than 0.")
+                        continue
+                  if new_contracts <= 0:
+                        print("Contracts must be greater than 0.")
+                        continue
+                  if new_point_value <= 0:
+                        print("Point value must be greater than 0.")
+                        continue
+
                   try:
                         date_input = input(f"Trade date (current: {current.get('trade_date', 'N/A')}): ").strip().replace(" ", "-")
                         if date_input == "" or date_input == "-":
@@ -568,8 +651,12 @@ while True:
                   worst_points_trade = trades[0]
                   best_dollar_trade = trades[0]
                   worst_dollar_trade = trades[0]
+                  best_points_idx = 0
+                  worst_points_idx = 0
+                  best_dollar_idx = 0
+                  worst_dollar_idx = 0
 
-                  for trade in trades:
+                  for i, trade in enumerate(trades):
                         points_pnl = trade['points_pnl']
                         dollar_pnl = trade.get('dollar_pnl', 0)
                         result = trade['result']
@@ -586,15 +673,19 @@ while True:
 
                         if trade['points_pnl'] > best_points_trade['points_pnl']:
                               best_points_trade = trade
+                              best_points_idx = i
 
                         if trade['points_pnl'] < worst_points_trade['points_pnl']:
                               worst_points_trade = trade
+                              worst_points_idx = i
 
                         if trade.get('dollar_pnl', 0) > best_dollar_trade.get('dollar_pnl', 0):
                               best_dollar_trade = trade
+                              best_dollar_idx = i
                         
                         if trade.get('dollar_pnl', 0) < worst_dollar_trade.get('dollar_pnl', 0):
                               worst_dollar_trade = trade
+                              worst_dollar_idx = i
                         
                         duration = trade.get("duration")
 
@@ -684,11 +775,11 @@ while True:
                   print(f"Total points P/L: {total_points_pnl:,.2f} pts")
                   print(f"Average points P/L: {average_points_pnl:.2f} pts")
                   print(
-                        f"Best Points Trade: #{trades.index(best_points_trade) + 1} {best_points_trade['symbol']} "
+                        f"Best Points Trade: #{best_points_idx + 1} {best_points_trade['symbol']} "
                         f"({best_points_trade['points_pnl']:.2f} pts)"
                   )
                   print(
-                        f"Worst Points Trade: #{trades.index(worst_points_trade) + 1} {worst_points_trade['symbol']} "
+                        f"Worst Points Trade: #{worst_points_idx + 1} {worst_points_trade['symbol']} "
                         f"({worst_points_trade['points_pnl']:.2f} pts)"
                   )
                   print(f"Gross Points Profit: {gross_points_profit:,.2f} pts")
@@ -707,11 +798,11 @@ while True:
                   print(f"Total dollar P/L: ${total_dollar_pnl:,.2f}")
                   print(f"Average dollar P/L: ${average_dollar_pnl:,.2f}")
                   print(
-                        f"Best Dollar Trade: #{trades.index(best_dollar_trade) + 1} {best_dollar_trade['symbol']} "
+                        f"Best Dollar Trade: #{best_dollar_idx + 1} {best_dollar_trade['symbol']} "
                         f"(${best_dollar_trade.get('dollar_pnl', 0):,.2f})"
                   )
                   print(
-                        f"Worst Dollar Trade: #{trades.index(worst_dollar_trade) + 1} {worst_dollar_trade['symbol']} "
+                        f"Worst Dollar Trade: #{worst_dollar_idx + 1} {worst_dollar_trade['symbol']} "
                         f"(${worst_dollar_trade.get('dollar_pnl', 0):,.2f})"
                   )
                   print(f"Gross Dollar Profit: ${gross_dollar_profit:,.2f}")
@@ -771,7 +862,7 @@ while True:
                         if setup_filter != "" and trade.get("setup", "").lower().strip() != setup_filter:
                               matches = False
                         if session_filter != "" and trade.get("session", "").lower().strip() != session_filter:
-                              matches = False
+                              matches = False 
 
                         if matches:
                               print(f"\nTrade #{i + 1}")
@@ -818,8 +909,9 @@ while True:
                   session_filter = input ("Session: ").lower().strip()
 
                   filtered_trades = []
+                  filtered_indices = []
 
-                  for trade in trades: 
+                  for idx, trade in enumerate(trades): 
                         matches = True 
                         
                         if symbol_filter != "" and trade.get("symbol", "").lower().strip() != symbol_filter:
@@ -835,6 +927,7 @@ while True:
 
                         if matches: 
                               filtered_trades.append(trade)
+                              filtered_indices.append(idx)
 
                   if len(filtered_trades) == 0: 
                         print("No trades matched those filters")
@@ -851,6 +944,10 @@ while True:
                         worst_points_trade = filtered_trades[0]
                         best_dollar_trade = filtered_trades[0]
                         worst_dollar_trade = filtered_trades[0]
+                        best_points_idx = filtered_indices[0]
+                        worst_points_idx = filtered_indices[0]
+                        best_dollar_idx = filtered_indices[0]
+                        worst_dollar_idx = filtered_indices[0]
 
                         total_duration = 0
                         timed_trades = 0
@@ -859,7 +956,7 @@ while True:
                         earliest_entry_time = None
                         latest_entry_time = None
                         
-                        for trade in filtered_trades: 
+                        for i, trade in enumerate(filtered_trades): 
                               points_pnl = trade["points_pnl"]
                               dollar_pnl = trade.get("dollar_pnl", 0)
                               result = trade["result"]    
@@ -875,16 +972,20 @@ while True:
                                     breakevens += 1
 
                               if points_pnl > best_points_trade["points_pnl"]:
-                                    best_points_trade = trade 
+                                    best_points_trade = trade
+                                    best_points_idx = filtered_indices[i]
 
                               if points_pnl < worst_points_trade["points_pnl"]:
-                                    worst_points_trade = trade 
+                                    worst_points_trade = trade
+                                    worst_points_idx = filtered_indices[i]
 
                               if dollar_pnl > best_dollar_trade.get("dollar_pnl", 0):
                                     best_dollar_trade = trade
+                                    best_dollar_idx = filtered_indices[i]
 
                               if dollar_pnl < worst_dollar_trade.get("dollar_pnl", 0):
                                     worst_dollar_trade = trade
+                                    worst_dollar_idx = filtered_indices[i]
 
                               duration = trade.get("duration")
                               if duration is not None:
@@ -962,11 +1063,11 @@ while True:
                         print(f"Total points P/L: {total_points_pnl:,.2f} pts")
                         print(f"Average points P/L: {average_points_pnl:.2f} pts")
                         print(
-                              f"Best Points Trade: #{trades.index(best_points_trade) + 1} {best_points_trade['symbol']} "
+                              f"Best Points Trade: #{best_points_idx + 1} {best_points_trade['symbol']} "
                               f"({best_points_trade['points_pnl']:.2f} pts)"
                         )
                         print(
-                              f"Worst Points Trade: #{trades.index(worst_points_trade) + 1} {worst_points_trade['symbol']} "
+                              f"Worst Points Trade: #{worst_points_idx + 1} {worst_points_trade['symbol']} "
                               f"({worst_points_trade['points_pnl']:.2f} pts)"
                         )
                         print(f"Gross Points Profit: {gross_profit:,.2f} pts")
@@ -985,11 +1086,11 @@ while True:
                         print(f"Total dollar P/L: ${total_dollar_pnl:,.2f}")
                         print(f"Average dollar P/L: ${average_dollar_pnl:,.2f}")
                         print(
-                              f"Best Dollar Trade: #{trades.index(best_dollar_trade) + 1} {best_dollar_trade['symbol']} "
+                              f"Best Dollar Trade: #{best_dollar_idx + 1} {best_dollar_trade['symbol']} "
                               f"(${best_dollar_trade.get('dollar_pnl', 0):,.2f})"
                         )
                         print(
-                              f"Worst Dollar Trade: #{trades.index(worst_dollar_trade) + 1} {worst_dollar_trade['symbol']} "
+                              f"Worst Dollar Trade: #{worst_dollar_idx + 1} {worst_dollar_trade['symbol']} "
                               f"(${worst_dollar_trade.get('dollar_pnl', 0):,.2f})"
                         )
                         print(f"Gross Dollar Profit: ${gross_dollar_profit:,.2f}")
@@ -1027,9 +1128,12 @@ while True:
 
       elif choice == "10":
             save_trades(trades)
-            print("Trades saved.")
+            print("Trades saved. (Trades are also saved automatically after every add, edit, and delete.)")
 
       elif choice == "11":
+            export_trades_to_csv(trades)
+
+      elif choice == "12":
             print("Goodbye.")
             break
       else:
