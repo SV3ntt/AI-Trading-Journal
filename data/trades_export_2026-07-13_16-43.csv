@@ -1,6 +1,0 @@
-Trade Number,Date,Symbol,Direction,Entry,Exit,Contracts,Point Value,Points P/L,Dollar P/L,Result,Entry Time,Exit Time,Duration (Minutes),Setup,Session,Notes,Mistake
-1,2026 06 11,MES,long,6789.5,6815.75,7,5.0,26.25,918.75,Win,10:01,10:32,31,,,,
-2,2026 06 12,MNQ,short,70675.0,70550.25,8,2.0,124.75,1996.0,Win,09:45,10:18,33,,,,
-3,2026 05 30,MES,short,7609.5,7655.25,6,5.0,-45.75,-1372.5,Loss,09:51,10:18,27,,,,
-4,2026 06 01,MNQ,long,60905.0,60890.25,8,2.0,-14.75,-236.0,Loss,10:50,11:09,19,,,,
-5,2026 06 12,MNQ,long,7560.5,7555.75,6,2.0,-4.75,-57.0,Loss,10:03,10:50,47,,,,

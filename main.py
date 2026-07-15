@@ -60,27 +60,29 @@ def export_trades_to_csv(trades):
       filename = f"data/trades_export_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
       
       headers = [
-            "Trade Number", 
-            "Date",
+            "Trade Number",
             "Symbol",
             "Direction",
             "Entry",
             "Exit",
             "Contracts",
             "Point Value",
+            "Risk Amount",
             "Points P/L",
             "Dollar P/L",
+            "Realized R",
             "Result",
-            "Entry Time",
+            "Trade Date",
+            "Entry Time", 
             "Exit Time",
-            "Duration (Minutes)",
+            "Duration (minutes)",
             "Setup",
             "Session",
             "Notes",
             "Mistake"
       ]
 
-      try: 
+      try:
             with open(filename, "w", newline="", encoding="utf-8") as file:
                   writer = csv.writer(file)
 
@@ -89,16 +91,18 @@ def export_trades_to_csv(trades):
                   for i, trade in enumerate(trades):
                         writer.writerow([
                               i + 1,
-                              trade.get("trade_date", "").replace("-", " "),
                               trade.get("symbol", "").upper(),
                               trade.get("direction", ""),
                               round(trade.get("entry", 0), 4),
                               round(trade.get("exit", 0), 4),
                               trade.get("contracts", ""),
                               round(trade.get("point_value", 0), 2),
+                              trade.get("risk_amount", ""),
                               round(trade.get("points_pnl", 0), 2),
                               round(trade.get("dollar_pnl", 0), 2),
+                              round(trade.get("realized_r", 0), 2),
                               trade.get("result", ""),
+                              trade.get("trade_date", "").replace("-", " "),
                               trade.get("entry_time", ""),
                               trade.get("exit_time", ""),
                               trade.get("duration", ""),
@@ -121,6 +125,12 @@ def calculate_points_pnl(direction, entry, exit_price):
       
 def calculate_dollar_pnl(points_pnl, point_value, contracts):
       return points_pnl * point_value * contracts
+
+def calculate_realized_r(dollar_pnl, risk_amount):
+      if risk_amount > 0:
+            return dollar_pnl / risk_amount
+      else:
+            return 0
 
 def calculate_result(points_pnl):
       if points_pnl > 0:
@@ -340,9 +350,10 @@ while True:
                  exit_price = float(input("Exit price: "))
                  contracts = int(input("Number of contracts: "))
                  point_value = float(input("Point value: ")) 
+                 risk_amount = float(input("Risk amount: $"))
                  
             except ValueError:
-                  print ("Invalid price, contracts, or point value.")
+                  print ("Invalid price, contracts, point value, or risk amount.")
                   continue
 
             if entry <= 0 or exit_price <= 0:
@@ -353,6 +364,9 @@ while True:
                   continue
             if point_value <= 0:
                   print("Point value must be greater than 0.")
+                  continue
+            if risk_amount <= 0:
+                  print("Risk amount must be greater than $0.")
                   continue
 
             try:
@@ -380,26 +394,30 @@ while True:
 
             points_pnl = calculate_points_pnl(direction, entry, exit_price)
             dollar_pnl = calculate_dollar_pnl(points_pnl, point_value, contracts)
-            result = calculate_result(points_pnl)
-            
+            realized_r = calculate_realized_r(dollar_pnl, risk_amount)
+            result = calculate_result(points_pnl)    
       
             trade = {
                   "symbol": symbol,
                   "direction": direction,
+
                   "entry": entry,
                   "exit": exit_price,
+
                   "contracts": contracts,
                   "point_value": point_value,
+
+                  "points_pnl": points_pnl,
+                  "dollar_pnl": dollar_pnl,
+                  "result": result,
+
+                  "risk_amount": risk_amount,
+                  "realized_r": realized_r,
 
                   "trade_date": trade_date,
                   "entry_time": entry_time,
                   "exit_time": exit_time,
                   "duration": duration,
-
-                  "points_pnl": points_pnl,
-                  "dollar_pnl": dollar_pnl,
-                  "result": result,
-                  
 
                   "setup": setup,
                   "session": session,
@@ -439,6 +457,7 @@ while True:
                         print(f"Symbol: {trade['symbol']}")
                         print(f"Direction: {trade['direction']}")
                         print(f"Date: {trade.get('trade_date', 'N/A')}")
+
                         print(f"Entry: {trade['entry']}")
                         print(f"Exit: {trade['exit']}")
                         print(f"Contracts: {trade.get('contracts', 'N/A')}")
@@ -449,12 +468,17 @@ while True:
                         else:
                               print(f"Point Value: ${point_value:,.2f}")
 
-                        print(f"Entry Time: {trade.get('entry_time', 'N/A')}")
-                        print(f"Exit Time: {trade.get('exit_time', 'N/A')}")
-                        print(f"Duration: {trade.get('duration', 'N/A')} minutes")
                         print(f"Points P/L: {trade['points_pnl']:,.2f} pts")
                         print(f"Dollar P/L: ${trade.get('dollar_pnl', 0):,.2f}")
                         print(f"Result: {trade['result']}")
+
+                        print(f"Risk Amount: ${trade.get('risk_amount', 0):,.2f}")
+                        print(f"Realized R: {trade.get('realized_r', 0):.2f}R")
+
+                        print(f"Entry Time: {trade.get('entry_time', 'N/A')}")
+                        print(f"Exit Time: {trade.get('exit_time', 'N/A')}")
+                        print(f"Duration: {trade.get('duration', 'N/A')} minutes")
+
                         print(f"Setup: {trade.get('setup', 'N/A')}")
                         print(f"Session: {trade.get('session', 'N/A')}")
                         print(f"Notes: {trade.get('notes', 'N/A')}")
@@ -510,10 +534,18 @@ while True:
             if 0 <= edit_index < len(trades):
                   current = trades[edit_index]
 
-                  symbol_input = input(f"Symbol (current: {current['symbol']}): ").lower().strip()
-                  new_symbol = symbol_input if symbol_input != "" else current["symbol"]
+                  symbol_input = input(
+                        f"Symbol (current: {current['symbol']}): "
+                        ).lower().strip()
+                  new_symbol = (
+                        symbol_input 
+                        if symbol_input != "" 
+                        else current["symbol"]
+                  )
 
-                  direction_input = input(f"Direction (current: {current['direction']}): ").lower().strip()
+                  direction_input = input(
+                        f"Direction (current: {current['direction']}): "
+                        ).lower().strip()
                   if direction_input == "":
                         new_direction = current["direction"]
                   elif direction_input not in valid_directions:
@@ -523,20 +555,53 @@ while True:
                         new_direction = direction_input
 
                   try:
-                        entry_input = input(f"Entry price (current: {current['entry']}): ").strip()
-                        new_entry = float(entry_input) if entry_input != "" else current["entry"]
+                        entry_input = input(
+                              f"Entry price (current: {current['entry']}): "
+                              ).strip()
+                        new_entry = (
+                              float(entry_input) 
+                              if entry_input != "" 
+                              else current["entry"]
+                        )
 
-                        exit_input = input(f"Exit price (current: {current['exit']}): ").strip()
-                        new_exit = float(exit_input) if exit_input != "" else current["exit"]
+                        exit_input = input(
+                              f"Exit price (current: {current['exit']}): "
+                              ).strip()
+                        new_exit = (
+                              float(exit_input) 
+                              if exit_input != "" 
+                              else current["exit"]
+                        )
 
-                        contracts_input = input(f"Contracts (current: {current.get('contracts', 'N/A')}): ").strip()
-                        new_contracts = int(contracts_input) if contracts_input != "" else current.get("contracts", 1)
+                        contracts_input = input(
+                              f"Contracts (current: {current.get('contracts', 'N/A')}): "
+                              ).strip()
+                        new_contracts = (
+                              int(contracts_input) if contracts_input != "" 
+                              else current.get("contracts", 1)
+                        )
 
-                        point_value_input = input(f"Point value (current: {current.get('point_value', 'N/A')}): ").strip()
-                        new_point_value = float(point_value_input) if point_value_input != "" else current.get("point_value", 1.0)
+                        point_value_input = input(
+                              f"Point value (current: {current.get('point_value', 'N/A')}): "
+                              
+                              ).strip()
+                        new_point_value = ( 
+                              float(point_value_input) 
+                              if point_value_input != "" 
+                              else current.get("point_value", 1.0)
+                        )
+
+                        risk_amount_input = input(
+                              f"Risk amount (current: ${current.get('risk_amount', 0):,.2f}): $"
+                        ).strip()
+                        new_risk_amount = (
+                              float(risk_amount_input) 
+                              if risk_amount_input != "" 
+                              else current.get("risk_amount", 0)
+                        )
 
                   except ValueError:
-                        print("Invalid price, contracts, or point value.")
+                        print("Invalid price, contracts, point value, or risk amount.")
                         continue
 
                   if new_entry <= 0 or new_exit <= 0:
@@ -547,6 +612,9 @@ while True:
                         continue
                   if new_point_value <= 0:
                         print("Point value must be greater than 0.")
+                        continue
+                  if new_risk_amount <= 0:
+                        print("Risk amount must be greater than or equal to $0.")
                         continue
 
                   try:
@@ -599,24 +667,34 @@ while True:
                         new_point_value, 
                         new_contracts
                   )
-                  new_result = calculate_result(new_points_pnl)
+                  new_realized_r = calculate_realized_r(
+                        new_dollar_pnl,
+                        new_risk_amount
+                  )
 
+                  new_result = calculate_result(new_points_pnl)
+                  
                   trades[edit_index] = {
                         "symbol": new_symbol,
                         "direction": new_direction,
+
                         "entry": new_entry,
                         "exit": new_exit,
+
                         "contracts": new_contracts,
                         "point_value": new_point_value,
+
+                        "points_pnl": new_points_pnl,
+                        "dollar_pnl": new_dollar_pnl,
+                        "result": new_result,
+
+                        "risk_amount": new_risk_amount,
+                        "realized_r": new_realized_r,
 
                         "trade_date": new_trade_date,
                         "entry_time": new_entry_time,
                         "exit_time": new_exit_time,
                         "duration": new_duration,
-
-                        "points_pnl": new_points_pnl,
-                        "dollar_pnl": new_dollar_pnl,
-                        "result": new_result,
 
                         "setup": new_setup,
                         "session": new_session,
@@ -643,12 +721,20 @@ while True:
                   total_points_pnl = 0
                   total_dollar_pnl = 0
 
+                  total_risk = 0
+                  total_realized_r = 0
+                  risk_trades = 0
+
                   total_duration = 0
                   timed_trades = 0 
                   longest_duration = None
                   shortest_duration = None
                   earliest_entry_time = None 
                   latest_entry_time = None
+                  best_r_trade = None
+                  worst_r_trade = None
+                  best_r_idx = None
+                  worst_r_idx = None
 
                   best_points_trade = trades[0]
                   worst_points_trade = trades[0]
@@ -666,6 +752,22 @@ while True:
 
                         total_points_pnl += points_pnl
                         total_dollar_pnl += dollar_pnl
+
+                        risk_amount = trade.get("risk_amount", 0)
+                        realized_r = trade.get("realized_r", 0)
+
+                        if risk_amount > 0:
+                              total_risk += risk_amount
+                              total_realized_r += realized_r
+                              risk_trades += 1
+                        
+                              if best_r_trade is None or realized_r > best_r_trade.get("realized_r", 0):
+                                    best_r_trade = trade
+                                    best_r_idx = i
+                              
+                              if worst_r_trade is None or realized_r < worst_r_trade.get("realized_r", 0):
+                                    worst_r_trade = trade
+                                    worst_r_idx = i
                   
                         if result == "Win":
                               wins += 1
@@ -713,8 +815,6 @@ while True:
                               if latest_entry_time is None or entry_datetime > latest_entry_time:
                                     latest_entry_time = entry_datetime
                                     
-
-
                   win_rate = (wins / total_trades) * 100
 
                   average_points_pnl = total_points_pnl / total_trades
@@ -749,6 +849,7 @@ while True:
                   average_dollar_win = gross_dollar_profit / wins if wins > 0 else 0
                   average_dollar_loss = gross_dollar_loss / losses if losses > 0 else 0
 
+                 
                   if gross_points_loss > 0:
                         points_profit_factor = gross_points_profit / gross_points_loss
                   else:
@@ -766,6 +867,13 @@ while True:
                         average_duration = total_duration / timed_trades 
                   else: 
                         average_duration = 0
+                  
+                  if risk_trades > 0:
+                        average_risk = total_risk / risk_trades
+                        average_realized_r = total_realized_r / risk_trades
+                  else: 
+                        average_risk = 0 
+                        average_realized_r = 0
 
                   print("\nTrading Statistics")
                   print(f"Total trades: {total_trades}")
@@ -820,6 +928,27 @@ while True:
 
                   print(f"Dollar Expectancy: ${dollar_expectancy:,.2f}")
 
+                  print("\nRisk Statistics")
+                  print(f"Average Risk: ${average_risk:,.2f}")
+                  print(f"Average Realized R: {average_realized_r:.2f}R")
+
+                  if best_r_trade is not None:
+                        print(
+                              f"Best R Trade: #{best_r_idx + 1} "
+                              f"{best_r_trade['symbol']} "
+                              f"({best_r_trade.get('realized_r', 0):.2f}R)"
+                        )
+                  else:
+                        print("Best R Trade: N/A")
+                  if worst_r_trade is not None:
+                        print(
+                              f"Worst R Trade: #{worst_r_idx + 1} "
+                              f"{worst_r_trade['symbol']} "
+                              f"({worst_r_trade.get('realized_r', 0):.2f}R)"
+                        )
+                  else:
+                        print("Worst R Trade: N/A")
+
                   print("\nTrade Duration Statistics")
                   print(f"Average trade duration: {average_duration:.2f} minutes")
                   if timed_trades > 0:
@@ -872,20 +1001,27 @@ while True:
                               print(f"Symbol: {trade['symbol']}")
                               print(f"Direction: {trade['direction']}")
                               print(f"Date: {trade.get('trade_date', 'N/A')}")
+
                               print(f"Entry: {trade['entry']}")
                               print(f"Exit: {trade['exit']}")
-                              print(f"Entry Time: {trade.get('entry_time', 'N/A')}")
-                              print(f"Exit Time: {trade.get('exit_time', 'N/A')}")
-                              print(f"Duration: {trade.get('duration', 'N/A')} minutes")
-                              print(f"Points P/L: {trade['points_pnl']:,.2f} pts")
-                              print(f"Dollar P/L: ${trade.get('dollar_pnl', 0):,.2f}")
                               print(f"Contracts: {trade.get('contracts', 'N/A')}")
                               point_value = trade.get("point_value")
                               if point_value is None:
                                     print("Point Value: N/A")
                               else:
                                     print(f"Point Value: ${point_value:,.2f}")
+
+                              print(f"Points P/L: {trade['points_pnl']:,.2f} pts")
+                              print(f"Dollar P/L: ${trade.get('dollar_pnl', 0):,.2f}")
                               print(f"Result: {trade['result']}")
+
+                              print(f"Risk Amount: ${trade.get('risk_amount', 0):,.2f}")
+                              print(f"Realized R: {trade.get('realized_r', 0):.2f}R")
+
+                              print(f"Entry Time: {trade.get('entry_time', 'N/A')}")
+                              print(f"Exit Time: {trade.get('exit_time', 'N/A')}")
+                              print(f"Duration: {trade.get('duration', 'N/A')} minutes")
+
                               print(f"Setup: {trade.get('setup', 'N/A')}")
                               print(f"Session: {trade.get('session', 'N/A')}")
                               print(f"Notes: {trade.get('notes', 'N/A')}")
@@ -943,6 +1079,10 @@ while True:
                         total_points_pnl = 0
                         total_dollar_pnl = 0
 
+                        total_risk = 0
+                        total_realized_r = 0
+                        risk_trades = 0
+
                         best_points_trade = filtered_trades[0]
                         worst_points_trade = filtered_trades[0]
                         best_dollar_trade = filtered_trades[0]
@@ -958,6 +1098,10 @@ while True:
                         shortest_duration = None
                         earliest_entry_time = None
                         latest_entry_time = None
+                        best_r_trade = None
+                        worst_r_trade = None
+                        best_r_idx = None
+                        worst_r_idx = None
                         
                         for i, trade in enumerate(filtered_trades): 
                               points_pnl = trade["points_pnl"]
@@ -990,6 +1134,22 @@ while True:
                                     worst_dollar_trade = trade
                                     worst_dollar_idx = filtered_indices[i]
 
+                              risk_amount = trade.get("risk_amount", 0)
+                              realized_r = trade.get("realized_r", 0)
+
+                              if risk_amount > 0:
+                                    total_risk += risk_amount
+                                    total_realized_r += realized_r
+                                    risk_trades += 1
+
+                                    if best_r_trade is None or realized_r > best_r_trade.get("realized_r", 0):
+                                          best_r_trade = trade
+                                          best_r_idx = filtered_indices[i]
+
+                                    if worst_r_trade is None or realized_r < worst_r_trade.get("realized_r", 0):
+                                          worst_r_trade = trade
+                                          worst_r_idx = filtered_indices[i]
+
                               duration = trade.get("duration")
                               if duration is not None:
                                     total_duration += duration
@@ -1012,15 +1172,15 @@ while True:
                         average_points_pnl = total_points_pnl / total_trades
                         average_dollar_pnl = total_dollar_pnl / total_trades
                         
-                        gross_profit = sum(
-                              trade["points_pnl"] 
-                              for trade in filtered_trades 
+                        gross_points_profit = sum(
+                              trade["points_pnl"]
+                              for trade in filtered_trades
                               if trade["points_pnl"] > 0
                         )
 
-                        gross_loss = sum(
-                              abs(trade["points_pnl"]) 
-                              for trade in filtered_trades 
+                        gross_points_loss = sum(
+                              abs(trade["points_pnl"])
+                              for trade in filtered_trades
                               if trade["points_pnl"] < 0
                         )
 
@@ -1036,16 +1196,23 @@ while True:
                               if trade.get("dollar_pnl", 0) < 0
                         )
 
-                        average_winning_trade = gross_profit / wins if wins > 0 else 0
-                        average_points_loss = gross_loss / losses if losses > 0 else 0
+                        if risk_trades > 0:
+                              average_risk = total_risk / risk_trades
+                              average_realized_r = total_realized_r / risk_trades
+                        else:
+                              average_risk = 0
+                              average_realized_r = 0
+
+                        average_points_win = gross_points_profit / wins if wins > 0 else 0
+                        average_points_loss = gross_points_loss / losses if losses > 0 else 0
 
                         average_dollar_win = gross_dollar_profit / wins if wins > 0 else 0
                         average_dollar_loss = gross_dollar_loss / losses if losses > 0 else 0
 
-                        if gross_loss > 0:
-                              profit_factor = gross_profit / gross_loss
+                        if gross_points_loss > 0:
+                              points_profit_factor = gross_points_profit / gross_points_loss
                         else:
-                              profit_factor = None
+                              points_profit_factor = None
                         
                         if gross_dollar_loss > 0:
                               dollar_profit_factor = gross_dollar_profit / gross_dollar_loss
@@ -1073,15 +1240,15 @@ while True:
                               f"Worst Points Trade: #{worst_points_idx + 1} {worst_points_trade['symbol']} "
                               f"({worst_points_trade['points_pnl']:.2f} pts)"
                         )
-                        print(f"Gross Points Profit: {gross_profit:,.2f} pts")
-                        print(f"Gross Points Loss: -{gross_loss:,.2f} pts")
-                        print(f"Average Points Win: {average_winning_trade:,.2f} pts")
+                        print(f"Gross Points Profit: {gross_points_profit:,.2f} pts")
+                        print(f"Gross Points Loss: -{gross_points_loss:,.2f} pts")
+                        print(f"Average Points Win: {average_points_win:,.2f} pts")
                         print(f"Average Points Loss: -{average_points_loss:,.2f} pts")
 
-                        if profit_factor is None:
+                        if points_profit_factor is None:
                               print("Points Profit Factor: N/A (no losing trades)")
                         else:
-                              print(f"Points Profit Factor: {profit_factor:.2f}")
+                              print(f"Points Profit Factor: {points_profit_factor:.2f}")
                         
                         print(f"Points Expectancy: {points_expectancy:.2f} pts")
 
@@ -1112,6 +1279,28 @@ while True:
                               average_duration = total_duration / timed_trades
                         else:
                               average_duration = 0
+
+                        print("\nRisk Statistics")
+                        print(f"Average Risk: ${average_risk:,.2f}")
+                        print(f"Average Realized R: {average_realized_r:.2f}R")
+
+                        if best_r_trade is not None:
+                              print(
+                                    f"Best R Trade: #{best_r_idx + 1} "
+                                    f"{best_r_trade['symbol']} "
+                                    f"({best_r_trade.get('realized_r', 0):.2f}R)"
+                              )
+                        else:
+                              print("Best R Trade: N/A")
+
+                        if worst_r_trade is not None:
+                              print(
+                                    f"Worst R Trade: #{worst_r_idx + 1} "
+                                    f"{worst_r_trade['symbol']} "
+                                    f"({worst_r_trade.get('realized_r', 0):.2f}R)"
+                              )
+                        else:
+                              print("Worst R Trade: N/A")
 
                         print("\nTrade Duration Statistics")
                         print(f"Average trade duration: {average_duration:.2f} minutes")
