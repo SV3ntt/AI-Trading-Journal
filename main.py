@@ -69,9 +69,12 @@ def export_trades_to_csv(trades):
             "Point Value",
             "Risk Amount",
             "Points P/L",
-            "Dollar P/L",
+            "Gross Dollar P/L",
+            "Commission",
+            "Net Dollar P/L",
             "Realized R",
             "Result",
+            "Net Result",
             "Trade Date",
             "Entry Time", 
             "Exit Time",
@@ -100,8 +103,20 @@ def export_trades_to_csv(trades):
                               trade.get("risk_amount", ""),
                               round(trade.get("points_pnl", 0), 2),
                               round(trade.get("dollar_pnl", 0), 2),
+                              round(trade.get("commission", 0), 2),
+                              round(
+                                    trade.get(
+                                          "net_dollar_pnl",
+                                          trade.get("dollar_pnl", 0)
+                                    ),
+                                    2
+                              ),
                               round(trade.get("realized_r", 0), 2),
                               trade.get("result", ""),
+                              trade.get(
+                                    "net_result",
+                                    trade.get("result", "")
+                              ),
                               trade.get("trade_date", "").replace("-", " "),
                               trade.get("entry_time", ""),
                               trade.get("exit_time", ""),
@@ -126,6 +141,9 @@ def calculate_points_pnl(direction, entry, exit_price):
 def calculate_dollar_pnl(points_pnl, point_value, contracts):
       return points_pnl * point_value * contracts
 
+def calculate_net_dollar_pnl(dollar_pnl, commission):
+      return dollar_pnl - commission
+
 def calculate_realized_r(dollar_pnl, risk_amount):
       if risk_amount > 0:
             return dollar_pnl / risk_amount
@@ -139,7 +157,15 @@ def calculate_result(points_pnl):
             return "Loss"
       else:
             return "Break-even"
-      
+
+def calculate_net_result(net_dollar_pnl):
+      if net_dollar_pnl > 0:
+            return "Win"
+      elif net_dollar_pnl < 0:
+            return "Loss"
+      else:
+            return "Break-even"
+
 def calculate_duration(entry_time, exit_time):
       entry_datetime = datetime.strptime(entry_time, "%H:%M")
       exit_datetime = datetime.strptime(exit_time, "%H:%M")
@@ -250,14 +276,17 @@ while True:
                   save_account(account)
                   print(f"Account '{account_name}' created successfully.")
 
-            total_dollar_pnl = sum(
-                  trade.get("dollar_pnl", 0)
+            total_net_dollar_pnl = sum(
+                  trade.get(
+                        "net_dollar_pnl",
+                        trade.get("dollar_pnl", 0)
+                  )
                   for trade in trades
             )
 
             starting_balance = account["starting_balance"]
-            current_balance = starting_balance + total_dollar_pnl
-            net_profit = total_dollar_pnl
+            current_balance = starting_balance + total_net_dollar_pnl
+            net_profit = total_net_dollar_pnl
             growth_percentage = (net_profit / starting_balance) * 100 if starting_balance != 0 else 0
 
             high_water_mark = account.get("high_water_mark", starting_balance)
@@ -361,13 +390,16 @@ while True:
             account["starting_balance"] = new_starting_balance
 
             if new_starting_balance != old_starting_balance:
-                  total_dollar_pnl = sum(
-                        trade.get("dollar_pnl", 0)
+                  total_net_dollar_pnl = sum(
+                        trade.get(
+                              "net_dollar_pnl",
+                              trade.get("dollar_pnl", 0)
+                        )
                         for trade in trades
                   )
 
                   recalculated_balance = (
-                        new_starting_balance + total_dollar_pnl
+                        new_starting_balance + total_net_dollar_pnl
                   )
 
                   account["high_water_mark"] = max(
@@ -396,9 +428,13 @@ while True:
                  contracts = int(input("Number of contracts: "))
                  point_value = float(input("Point value: ")) 
                  risk_amount = float(input("Risk amount: $"))
+                 commission = float(input("Total commission: $"))
                  
             except ValueError:
-                  print ("Invalid price, contracts, point value, or risk amount.")
+                  print ("Invalid price, contracts, point value," 
+                  "risk amount, or commission."
+                  
+                  )
                   continue
 
             if entry <= 0 or exit_price <= 0:
@@ -412,6 +448,9 @@ while True:
                   continue
             if risk_amount <= 0:
                   print("Risk amount must be greater than $0.")
+                  continue
+            if commission < 0:
+                  print("Commission cannot be negative.")
                   continue
 
             try:
@@ -437,11 +476,31 @@ while True:
             notes = input("Enter notes: ").strip()
             mistake = input("Enter mistake: ").strip()
 
-            points_pnl = calculate_points_pnl(direction, entry, exit_price)
-            dollar_pnl = calculate_dollar_pnl(points_pnl, point_value, contracts)
-            realized_r = calculate_realized_r(dollar_pnl, risk_amount)
-            result = calculate_result(points_pnl)    
+            points_pnl = calculate_points_pnl(
+                  direction, 
+                  entry, 
+                  exit_price
+            )
+
+            dollar_pnl = calculate_dollar_pnl(
+                  points_pnl,
+                  point_value,
+                  contracts
+            )
+
+            net_dollar_pnl = calculate_net_dollar_pnl(
+                  dollar_pnl, 
+                  commission
+            )
+            
+            realized_r = calculate_realized_r(
+                  net_dollar_pnl, 
+                  risk_amount
+            )
       
+            result = calculate_result(points_pnl)
+            net_result = calculate_net_result(net_dollar_pnl)
+
             trade = {
                   "symbol": symbol,
                   "direction": direction,
@@ -454,7 +513,10 @@ while True:
 
                   "points_pnl": points_pnl,
                   "dollar_pnl": dollar_pnl,
+                  "commission": commission,
+                  "net_dollar_pnl": net_dollar_pnl,
                   "result": result,
+                  "net_result": net_result,
 
                   "risk_amount": risk_amount,
                   "realized_r": realized_r,
@@ -481,7 +543,20 @@ while True:
                   print(f"\nTrades ({len(trades)} total):")
                   for i in range(len(trades)):
                         trade = trades[i]
-                        print(f"  {i + 1}. {trade['symbol'].upper()} | {trade.get('trade_date', 'N/A')} | {trade['direction']} | {trade['result']} | {trade['points_pnl']:,.2f} pts | ${trade.get('dollar_pnl', 0):,.2f}")
+
+                        net_pnl = trade.get(
+                              "net_dollar_pnl",
+                              trade.get("dollar_pnl", 0)
+                        )
+
+                        print(
+                              f"  {i + 1}. {trade['symbol'].upper()} | "
+                              f"{trade.get('trade_date', 'N/A')} | "
+                              f"{trade['direction']} | "
+                              f"{trade.get('net_result', trade.get('result', 'N/A'))} | "
+                              f"{trade['points_pnl']:,.2f} pts | "
+                              f"Net: ${net_pnl:,.2f}"
+                        )
 
                   view_input = input("\nEnter a trade number for full details, or press Enter to go back: ").strip()
 
@@ -514,8 +589,24 @@ while True:
                               print(f"Point Value: ${point_value:,.2f}")
 
                         print(f"Points P/L: {trade['points_pnl']:,.2f} pts")
-                        print(f"Dollar P/L: ${trade.get('dollar_pnl', 0):,.2f}")
+                        print(
+                              f"Gross Dollar P/L: "
+                              f"${trade.get('dollar_pnl', 0):,.2f}"
+                         )
+                        print(
+                              f"Commission: "
+                              f"${trade.get('commission', 0):,.2f}"
+                        )
+                        print(
+                              f"Net Dollar P/L: "
+                              f"${trade.get('net_dollar_pnl', trade.get('dollar_pnl', 0)):,.2f}"
+                        )
+                        
                         print(f"Result: {trade['result']}")
+                        print(
+                              f"Net Result: "
+                              f"{trade.get('net_result', trade.get('result', 'N/A'))}"
+                        )
 
                         print(f"Risk Amount: ${trade.get('risk_amount', 0):,.2f}")
                         print(f"Realized R: {trade.get('realized_r', 0):.2f}R")
@@ -549,7 +640,24 @@ while True:
 
                   if 0 <= delete_index < len(trades):
                         trade_to_delete = trades[delete_index]
-                        confirm = input(f"Are you sure you want to delete {trade_to_delete['symbol']} ({trade_to_delete['result']}, {trade_to_delete['points_pnl']:,.2f} pts)? (yes/no): ").lower().strip()
+
+                        delete_net_result = trade_to_delete.get(
+                              "net_result",
+                              calculate_net_result(
+                                    trade_to_delete.get(
+                                          "net_dollar_pnl",
+                                          trade_to_delete.get("dollar_pnl", 0)
+                                    )
+                              )
+                        )
+
+                        confirm = input(
+                              f"Are you sure you want to delete "
+                              f"{trade_to_delete['symbol']} "
+                              f"({delete_net_result}, "
+                              f"{trade_to_delete['points_pnl']:,.2f} pts)? "
+                              f"(yes/no): "
+                        ).lower().strip()
                         if confirm == "yes":
                               removed_trade = trades.pop(delete_index)
                               save_trades(trades)
@@ -637,16 +745,31 @@ while True:
                         )
 
                         risk_amount_input = input(
-                              f"Risk amount (current: ${current.get('risk_amount', 0):,.2f}): $"
+                              f"Risk amount "
+                              f"(current: ${current.get('risk_amount', 0):,.2f}): $"
                         ).strip()
+                        
                         new_risk_amount = (
                               float(risk_amount_input) 
                               if risk_amount_input != "" 
                               else current.get("risk_amount", 0)
                         )
 
+                        commission_input = input(
+                              f"Total commission "
+                              f"(current: ${current.get('commission', 0):,.2f}): $"
+                        ).strip()
+
+                        new_commission = (
+                              float(commission_input) 
+                              if commission_input != "" 
+                              else current.get("commission", 0)
+                        )
+
                   except ValueError:
-                        print("Invalid price, contracts, point value, or risk amount.")
+                        print("Invalid price, contracts, point value, "
+                        " risk amount, or commission."
+                        )
                         continue
 
                   if new_entry <= 0 or new_exit <= 0:
@@ -661,6 +784,10 @@ while True:
                   if new_risk_amount <= 0:
                         print("Risk amount must be greater than $0.")
                         continue
+                  if new_commission < 0:
+                        print("Commission cannot be negative.")
+                        continue
+
 
                   try:
                         date_input = input(f"Trade date (current: {current.get('trade_date', 'N/A')}): ").strip().replace(" ", "-")
@@ -707,18 +834,28 @@ while True:
                         new_entry,
                         new_exit
                   )
+                  
                   new_dollar_pnl = calculate_dollar_pnl(
                         new_points_pnl, 
                         new_point_value, 
                         new_contracts
                   )
-                  new_realized_r = calculate_realized_r(
+
+                  new_net_dollar_pnl = calculate_net_dollar_pnl(
                         new_dollar_pnl,
+                        new_commission
+                  )
+
+                  new_realized_r = calculate_realized_r(
+                        new_net_dollar_pnl,
                         new_risk_amount
                   )
 
                   new_result = calculate_result(new_points_pnl)
-                  
+                  new_net_result = calculate_net_result(
+                        new_net_dollar_pnl
+                  )
+
                   trades[edit_index] = {
                         "symbol": new_symbol,
                         "direction": new_direction,
@@ -731,7 +868,10 @@ while True:
 
                         "points_pnl": new_points_pnl,
                         "dollar_pnl": new_dollar_pnl,
+                        "commission": new_commission,
+                        "net_dollar_pnl": new_net_dollar_pnl,
                         "result": new_result,
+                        "net_result": new_net_result,
 
                         "risk_amount": new_risk_amount,
                         "realized_r": new_realized_r,
@@ -763,8 +903,14 @@ while True:
                   losses = 0
                   breakevens = 0
 
+                  net_wins = 0
+                  net_losses = 0
+                  net_breakevens = 0
+
                   total_points_pnl = 0
                   total_dollar_pnl = 0
+                  total_commission = 0
+                  total_net_dollar_pnl = 0
 
                   total_risk = 0
                   total_realized_r = 0
@@ -785,18 +931,29 @@ while True:
                   worst_points_trade = trades[0]
                   best_dollar_trade = trades[0]
                   worst_dollar_trade = trades[0]
+                  best_net_trade = trades[0]
+                  worst_net_trade = trades[0]
                   best_points_idx = 0
                   worst_points_idx = 0
                   best_dollar_idx = 0
                   worst_dollar_idx = 0
+                  best_net_idx = 0
+                  worst_net_idx = 0
 
                   for i, trade in enumerate(trades):
                         points_pnl = trade['points_pnl']
                         dollar_pnl = trade.get('dollar_pnl', 0)
+                        commission = trade.get('commission', 0)
+                        net_dollar_pnl = trade.get(
+                              "net_dollar_pnl", 
+                              trade.get("dollar_pnl", 0)
+                        )
                         result = trade['result']
 
                         total_points_pnl += points_pnl
                         total_dollar_pnl += dollar_pnl
+                        total_commission += commission
+                        total_net_dollar_pnl += net_dollar_pnl
 
                         risk_amount = trade.get("risk_amount", 0)
                         realized_r = trade.get("realized_r", 0)
@@ -813,13 +970,45 @@ while True:
                               if worst_r_trade is None or realized_r < worst_r_trade.get("realized_r", 0):
                                     worst_r_trade = trade
                                     worst_r_idx = i
-                  
+
+                        if (
+                              net_dollar_pnl
+                              > best_net_trade.get(
+                                    "net_dollar_pnl", 
+                                    best_net_trade.get("dollar_pnl", 0)
+                              )
+                        ):
+                              best_net_trade = trade
+                              best_net_idx = i  
+
+                        if (
+                              net_dollar_pnl
+                              < worst_net_trade.get(
+                                    "net_dollar_pnl", 
+                                    worst_net_trade.get("dollar_pnl", 0)
+                              )
+                        ):
+                              worst_net_trade = trade
+                              worst_net_idx = i
+
                         if result == "Win":
                               wins += 1
                         elif result == "Loss":
                               losses += 1
                         else:
                               breakevens += 1
+
+                        net_result = trade.get(
+                              "net_result",
+                              calculate_net_result(net_dollar_pnl)
+                        )
+
+                        if net_result == "Win":
+                              net_wins += 1
+                        elif net_result == "Loss":
+                              net_losses += 1
+                        else:
+                              net_breakevens += 1
 
                         if trade['points_pnl'] > best_points_trade['points_pnl']:
                               best_points_trade = trade
@@ -861,9 +1050,40 @@ while True:
                                     latest_entry_time = entry_datetime
                                     
                   win_rate = (wins / total_trades) * 100
+                  net_win_rate = (net_wins / total_trades) * 100
 
                   average_points_pnl = total_points_pnl / total_trades
                   average_dollar_pnl = total_dollar_pnl / total_trades
+                  average_commission = total_commission / total_trades
+                  average_net_dollar_pnl = (
+                        total_net_dollar_pnl / total_trades
+                  )
+
+                  gross_net_profit = sum(
+                        trade.get(
+                              "net_dollar_pnl",
+                              trade.get("dollar_pnl", 0)
+                        )
+                        for trade in trades
+                        if trade.get(
+                              "net_dollar_pnl",
+                              trade.get("dollar_pnl", 0)
+                        ) > 0
+                  )
+
+                  gross_net_loss = sum(
+                        abs(
+                              trade.get(
+                                    "net_dollar_pnl",
+                                    trade.get("dollar_pnl", 0)
+                              )
+                        )
+                        for trade in trades
+                        if trade.get(
+                              "net_dollar_pnl",
+                              trade.get("dollar_pnl", 0)
+                        ) < 0
+                  )
 
                   gross_points_profit = sum(
                         abs(trade["points_pnl"]) \
@@ -894,7 +1114,18 @@ while True:
                   average_dollar_win = gross_dollar_profit / wins if wins > 0 else 0
                   average_dollar_loss = gross_dollar_loss / losses if losses > 0 else 0
 
-                 
+                  average_net_win = (
+                        gross_net_profit / net_wins
+                        if net_wins > 0
+                        else 0
+                  )
+
+                  average_net_loss = (
+                        gross_net_loss / net_losses
+                        if net_losses > 0
+                        else 0
+                  )
+
                   if gross_points_loss > 0:
                         points_profit_factor = gross_points_profit / gross_points_loss
                   else:
@@ -905,8 +1136,17 @@ while True:
                   else:
                         dollar_profit_factor = None
 
+
+                  if gross_net_loss > 0:
+                        net_profit_factor = (
+                              gross_net_profit / gross_net_loss
+                        )
+                  else:
+                        net_profit_factor = None
+
                   points_expectancy = average_points_pnl
                   dollar_expectancy = average_dollar_pnl
+                  net_expectancy = average_net_dollar_pnl
 
                   if timed_trades > 0: 
                         average_duration = total_duration / timed_trades 
@@ -950,7 +1190,7 @@ while True:
 
                   print(f"Points Expectancy: {points_expectancy:.2f} pts")
 
-                  print("\nDollar P/L Statistics")
+                  print("\nGross Dollar P/L Statistics")
                   print(f"Total dollar P/L: ${total_dollar_pnl:,.2f}")
                   print(f"Average dollar P/L: ${average_dollar_pnl:,.2f}")
                   print(
@@ -972,6 +1212,47 @@ while True:
                         print(f"Dollar Profit Factor: {dollar_profit_factor:.2f}")
 
                   print(f"Dollar Expectancy: ${dollar_expectancy:,.2f}")
+
+                  print("\nCommission and Net Dollar P/L Statistics")
+                  print(f"Net Wins: {net_wins}")
+                  print(f"Net Losses: {net_losses}")
+                  print(f"Net Break-even Trades: {net_breakevens}")
+                  print(f"Net Win Rate: {net_win_rate:.2f}%")
+                  print(f"Total commission: ${total_commission:,.2f}")
+                  print(f"Average commission: ${average_commission:,.2f}")
+                  print(
+                        f"Total net dollar P/L: "
+                        f"${total_net_dollar_pnl:,.2f}"
+                  )
+
+                  print(
+                        f"Average net dollar P/L: "
+                        f"${average_net_dollar_pnl:,.2f}"
+                  )
+
+                  print(
+                        f"Best Net Trade: #{best_net_idx + 1} "
+                        f"{best_net_trade['symbol']} "
+                        f"(${best_net_trade.get('net_dollar_pnl', best_net_trade.get('dollar_pnl', 0)):,.2f})"
+                  )
+
+                  print(
+                        f"Worst Net Trade: #{worst_net_idx + 1} "
+                        f"{worst_net_trade['symbol']} "
+                        f"(${worst_net_trade.get('net_dollar_pnl', worst_net_trade.get('dollar_pnl', 0)):,.2f})"
+                  )
+
+                  print(f"Gross Net Profit: ${gross_net_profit:,.2f}")
+                  print(f"Gross Net Loss: -${gross_net_loss:,.2f}")
+                  print(f"Average Net Win: ${average_net_win:,.2f}")
+                  print(f"Average Net Loss: -${average_net_loss:,.2f}")
+
+                  if net_profit_factor is None:
+                        print("Net Profit Factor: N/A (no losing trades)")
+                  else:
+                        print(f"Net Profit Factor: {net_profit_factor:.2f}")
+
+                  print(f"Net Expectancy: ${net_expectancy:,.2f}")
 
                   print("\nRisk Statistics")
                   print(f"Average Risk: ${average_risk:,.2f}")
@@ -1020,6 +1301,7 @@ while True:
                   symbol_filter = input("Symbol: ").lower().strip()
                   direction_filter = input ("Direction: ").lower().strip()
                   result_filter = input ("Result: ").lower().strip()
+                  net_result_filter = input("Net Result: ").lower().strip()
                   setup_filter = input ("setup: ").lower().strip()
                   session_filter = input ("session: ").lower().strip()
 
@@ -1052,13 +1334,30 @@ while True:
                               matches = False
                         if result_filter != "" and trade.get("result", "").lower().strip() != result_filter:
                               matches = False
+
+                        net_result = trade.get(
+                              "net_result",
+                              calculate_net_result(
+                                    trade.get(
+                                          "net_dollar_pnl",
+                                          trade.get("dollar_pnl", 0)
+                                    )
+                              )
+                        )
+
+                        if (
+                              net_result_filter != ""
+                              and net_result.lower().strip() != net_result_filter
+                        ):
+                              matches = False
+
                         if setup_filter != "" and trade.get("setup", "").lower().strip() != setup_filter:
                               matches = False
                         if session_filter != "" and trade.get("session", "").lower().strip() != session_filter:
-                              matches = False 
+                              matches = False
 
                         if not trade_is_in_date_range(
-                              trade, 
+                              trade,
                               start_date_filter,
                               end_date_filter
                         ):
@@ -1080,9 +1379,20 @@ while True:
                                     print(f"Point Value: ${point_value:,.2f}")
 
                               print(f"Points P/L: {trade['points_pnl']:,.2f} pts")
-                              print(f"Dollar P/L: ${trade.get('dollar_pnl', 0):,.2f}")
+                              print(
+                                    f"Gross Dollar P/L: "
+                                    f"${trade.get('dollar_pnl', 0):,.2f}"
+                              )
+                              print(
+                                    f"Commission: "
+                                    f"${trade.get('commission', 0):,.2f}"
+                              )
+                              print(
+                                    f"Net Dollar P/L: "
+                                    f"${trade.get('net_dollar_pnl', trade.get('dollar_pnl', 0)):,.2f}"
+                              )
                               print(f"Result: {trade['result']}")
-
+                              print(f"Net Result: {net_result}")
                               print(f"Risk Amount: ${trade.get('risk_amount', 0):,.2f}")
                               print(f"Realized R: {trade.get('realized_r', 0):.2f}R")
 
@@ -1112,6 +1422,7 @@ while True:
                   symbol_filter = input("Symbol: ").lower().strip()
                   direction_filter = input ("Direction: ").lower().strip()
                   result_filter = input ("Result: ").lower().strip()
+                  net_result_filter = input("Net Result: ").lower().strip()
                   setup_filter = input ("Setup: ").lower().strip()
                   session_filter = input ("Session: ").lower().strip()
 
@@ -1141,12 +1452,29 @@ while True:
                               matches = False 
                         if direction_filter != "" and trade.get("direction", "").lower().strip() != direction_filter: 
                               matches = False 
-                        if result_filter != "" and trade.get("result", "").lower().strip() != result_filter: 
+                        if result_filter != "" and trade.get("result", "").lower().strip() != result_filter:
                               matches = False
+
+                        net_result = trade.get(
+                              "net_result",
+                              calculate_net_result(
+                                    trade.get(
+                                          "net_dollar_pnl",
+                                          trade.get("dollar_pnl", 0)
+                                    )
+                              )
+                        )
+
+                        if (
+                              net_result_filter != ""
+                              and net_result.lower().strip() != net_result_filter
+                        ):
+                              matches = False
+
                         if setup_filter != "" and trade.get("setup", "").lower().strip() != setup_filter:
-                              matches = False 
+                              matches = False
                         if session_filter != "" and trade.get("session", "").lower().strip() != session_filter:
-                              matches = False 
+                              matches = False
 
                         if not trade_is_in_date_range(
                               trade,
@@ -1164,11 +1492,17 @@ while True:
                   else: 
                         total_trades = len(filtered_trades)
                         wins = 0
-                        losses = 0 
-                        breakevens = 0 
+                        losses = 0
+                        breakevens = 0
+
+                        net_wins = 0
+                        net_losses = 0
+                        net_breakevens = 0
 
                         total_points_pnl = 0
                         total_dollar_pnl = 0
+                        total_commission = 0
+                        total_net_dollar_pnl = 0
 
                         total_risk = 0
                         total_realized_r = 0
@@ -1182,6 +1516,10 @@ while True:
                         worst_points_idx = filtered_indices[0]
                         best_dollar_idx = filtered_indices[0]
                         worst_dollar_idx = filtered_indices[0]
+                        best_net_trade = filtered_trades[0]
+                        worst_net_trade = filtered_trades[0]
+                        best_net_idx = filtered_indices[0]
+                        worst_net_idx = filtered_indices[0]
 
                         total_duration = 0
                         timed_trades = 0
@@ -1197,17 +1535,36 @@ while True:
                         for i, trade in enumerate(filtered_trades): 
                               points_pnl = trade["points_pnl"]
                               dollar_pnl = trade.get("dollar_pnl", 0)
+                              commission = trade.get("commission", 0)
+                              net_dollar_pnl = trade.get(
+                                    "net_dollar_pnl",
+                                    trade.get("dollar_pnl", 0)
+                              )
                               result = trade["result"]    
 
                               total_points_pnl += points_pnl
                               total_dollar_pnl += dollar_pnl
+                              total_commission += commission
+                              total_net_dollar_pnl += net_dollar_pnl
 
-                              if result == "Win": 
+                              if result == "Win":
                                     wins += 1
                               elif result == "Loss":
                                     losses += 1
-                              else: 
+                              else:
                                     breakevens += 1
+
+                              net_result = trade.get(
+                                    "net_result",
+                                    calculate_net_result(net_dollar_pnl)
+                              )
+
+                              if net_result == "Win":
+                                    net_wins += 1
+                              elif net_result == "Loss":
+                                    net_losses += 1
+                              else:
+                                    net_breakevens += 1
 
                               if points_pnl > best_points_trade["points_pnl"]:
                                     best_points_trade = trade
@@ -1224,6 +1581,25 @@ while True:
                               if dollar_pnl < worst_dollar_trade.get("dollar_pnl", 0):
                                     worst_dollar_trade = trade
                                     worst_dollar_idx = filtered_indices[i]
+
+                              if (
+                                    net_dollar_pnl
+                                    > best_net_trade.get(
+                                          "net_dollar_pnl",
+                                          best_net_trade.get("dollar_pnl", 0)
+                                    )
+                              ):
+                                    best_net_trade = trade
+                                    best_net_idx = filtered_indices[i]
+                              if (
+                                    net_dollar_pnl
+                                    < worst_net_trade.get(
+                                          "net_dollar_pnl",
+                                          worst_net_trade.get("dollar_pnl", 0)
+                                    )
+                              ):
+                                    worst_net_trade = trade
+                                    worst_net_idx = filtered_indices[i]
 
                               risk_amount = trade.get("risk_amount", 0)
                               realized_r = trade.get("realized_r", 0)
@@ -1258,11 +1634,66 @@ while True:
                                     if latest_entry_time is None or entry_datetime > latest_entry_time:
                                           latest_entry_time = entry_datetime
 
-                        win_rate = (wins / total_trades) * 100 
+                        win_rate = (wins / total_trades) * 100
+                        net_win_rate = (net_wins / total_trades) * 100
 
                         average_points_pnl = total_points_pnl / total_trades
                         average_dollar_pnl = total_dollar_pnl / total_trades
                         
+                        average_commission = (
+                              total_commission / total_trades
+                        )
+
+                        average_net_dollar_pnl = (
+                              total_net_dollar_pnl / total_trades
+                        )
+
+                        gross_net_profit = sum(
+                              trade.get(
+                                    "net_dollar_pnl",
+                                    trade.get("dollar_pnl", 0)
+                              )
+                              for trade in filtered_trades
+                              if trade.get(
+                                    "net_dollar_pnl",
+                                    trade.get("dollar_pnl", 0)
+                              ) > 0
+                        )
+                        gross_net_loss = sum(
+                              abs(
+                                    trade.get(
+                                          "net_dollar_pnl",
+                                          trade.get("dollar_pnl", 0)
+                                    )
+                              )
+                              for trade in filtered_trades
+                              if trade.get(
+                                    "net_dollar_pnl",
+                                    trade.get("dollar_pnl", 0)
+                              ) < 0
+                        )
+
+                        average_net_win = (
+                              gross_net_profit / net_wins
+                              if net_wins > 0
+                              else 0
+                        )
+
+                        average_net_loss = (
+                              gross_net_loss / net_losses
+                              if net_losses > 0
+                              else 0
+                        )
+
+                        if gross_net_loss > 0:
+                              net_profit_factor = (
+                                    gross_net_profit / gross_net_loss
+                              )
+                        else:
+                              net_profit_factor = None
+                        
+                        net_expectancy = average_net_dollar_pnl
+
                         gross_points_profit = sum(
                               trade["points_pnl"]
                               for trade in filtered_trades
@@ -1343,7 +1774,7 @@ while True:
                         
                         print(f"Points Expectancy: {points_expectancy:.2f} pts")
 
-                        print("\nDollar P/L Statistics")
+                        print("\nGross Dollar P/L Statistics")
                         print(f"Total dollar P/L: ${total_dollar_pnl:,.2f}")
                         print(f"Average dollar P/L: ${average_dollar_pnl:,.2f}")
                         print(
@@ -1365,6 +1796,47 @@ while True:
                               print(f"Dollar Profit Factor: {dollar_profit_factor:.2f}")
 
                         print(f"Dollar Expectancy: ${dollar_expectancy:,.2f}")
+
+                        print("\nCommission and Net Dollar P/L Statistics")
+                        print(f"Net Wins: {net_wins}")
+                        print(f"Net Losses: {net_losses}")
+                        print(f"Net Break-even Trades: {net_breakevens}")
+                        print(f"Net Win Rate: {net_win_rate:.2f}%")
+                        print(f"Total commission: ${total_commission:,.2f}")
+                        print(f"Average commission: ${average_commission:,.2f}")
+                        print(
+                              f"Total net dollar P/L: "
+                              f"${total_net_dollar_pnl:,.2f}"
+                        )
+
+                        print(
+                              f"Average net dollar P/L: "
+                              f"${average_net_dollar_pnl:,.2f}"
+                        )
+
+                        print(
+                              f"Best Net Trade: #{best_net_idx + 1} "
+                              f"{best_net_trade['symbol']} "
+                              f"(${best_net_trade.get('net_dollar_pnl', best_net_trade.get('dollar_pnl', 0)):,.2f})"
+                        )
+
+                        print(
+                              f"Worst Net Trade: #{worst_net_idx + 1} "
+                              f"{worst_net_trade['symbol']} "
+                              f"(${worst_net_trade.get('net_dollar_pnl', worst_net_trade.get('dollar_pnl', 0)):,.2f})"
+                        )
+
+                        print(f"Gross Net Profit: ${gross_net_profit:,.2f}")
+                        print(f"Gross Net Loss: -${gross_net_loss:,.2f}")
+                        print(f"Average Net Win: ${average_net_win:,.2f}")
+                        print(f"Average Net Loss: -${average_net_loss:,.2f}")
+
+                        if net_profit_factor is None:
+                              print("Net Profit Factor: N/A (no losing trades)")
+                        else:
+                              print(f"Net Profit Factor: {net_profit_factor:.2f}")
+
+                        print(f"Net Expectancy: ${net_expectancy:,.2f}")
 
                         if timed_trades > 0:
                               average_duration = total_duration / timed_trades

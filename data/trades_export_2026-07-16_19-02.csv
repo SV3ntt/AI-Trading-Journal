@@ -1,0 +1,7 @@
+Trade Number,Symbol,Direction,Entry,Exit,Contracts,Point Value,Risk Amount,Points P/L,Gross Dollar P/L,Commission,Net Dollar P/L,Realized R,Result,Net Result,Trade Date,Entry Time,Exit Time,Duration (minutes),Setup,Session,Notes,Mistake
+1,MES,long,6789.5,6815.75,7,5.0,300.0,26.25,918.75,41.73,877.02,2.92,Win,Win,2026 06 11,10:01,10:32,31,,,,
+2,MNQ,short,70675.0,70550.25,8,2.0,600.0,124.75,1996.0,80.0,1916.0,3.19,Win,Win,2026 06 12,09:45,10:18,33,,,,
+3,MES,short,7609.5,7655.25,6,5.0,450.0,-45.75,-1372.5,15.0,-1387.5,-3.08,Loss,Loss,2026 05 30,09:51,10:18,27,,,,
+4,MNQ,long,60905.0,60890.25,8,2.0,150.0,-14.75,-236.0,11.51,-247.51,-1.65,Loss,Loss,2026 06 01,10:50,11:09,19,,,,
+5,MNQ,long,7560.5,7555.75,6,2.0,800.0,-4.75,-57.0,85.7,-142.7,-0.18,Loss,Loss,2026 06 12,10:03,10:50,47,,,,
+6,MES,long,7556.5,7580.25,6,5.0,250.0,23.75,712.5,18.0,694.5,2.78,Win,Win,2026 07 31,10:31,10:50,19,,,,
