@@ -152,6 +152,51 @@ def calculate_duration(entry_time, exit_time):
 
       return duration_minutes
 
+def get_optional_date(prompt): 
+      while True:
+            date_input = input(prompt).strip().replace(" ", "-")
+      
+            if date_input == "":
+                  return None
+
+            try:
+                  parsed_date = datetime.strptime(
+                        date_input, 
+                        "%Y-%m-%d"
+                  ).date()
+
+                  return parsed_date
+            
+            except ValueError:
+                  print("Invalid date. Please use YYYY-MM-DD format.")
+
+def trade_is_in_date_range(trade, start_date, end_date):
+      if start_date is None and end_date is None:
+            return True
+      
+      trade_date_text = (
+            trade.get("trade_date", "")
+            .strip()
+            .replace(" ", "-")
+      )
+
+      try:
+            trade_date = datetime.strptime(
+                  trade_date_text, 
+                  "%Y-%m-%d"
+            ).date()
+
+      except ValueError:
+            return False
+      
+      if start_date is not None and trade_date < start_date:
+            return False
+      
+      if end_date is not None and trade_date > end_date:
+            return False
+      
+      return True 
+
 trades = load_trades()
 account = load_account()
 
@@ -614,7 +659,7 @@ while True:
                         print("Point value must be greater than 0.")
                         continue
                   if new_risk_amount <= 0:
-                        print("Risk amount must be greater than or equal to $0.")
+                        print("Risk amount must be greater than $0.")
                         continue
 
                   try:
@@ -978,6 +1023,22 @@ while True:
                   setup_filter = input ("setup: ").lower().strip()
                   session_filter = input ("session: ").lower().strip()
 
+                  start_date_filter = get_optional_date(
+                        "Start date (YYYY-MM-DD): "
+                  )
+
+                  end_date_filter = get_optional_date(
+                        "End date (YYYY-MM-DD): "
+                  )
+
+                  if (
+                        start_date_filter is not None
+                        and end_date_filter is not None
+                        and end_date_filter < start_date_filter
+                  ):
+                        print("End date cannot be earlier than start date.")
+                        continue
+
                   found = False
                   match_count = 0
 
@@ -995,6 +1056,13 @@ while True:
                               matches = False
                         if session_filter != "" and trade.get("session", "").lower().strip() != session_filter:
                               matches = False 
+
+                        if not trade_is_in_date_range(
+                              trade, 
+                              start_date_filter,
+                              end_date_filter
+                        ):
+                              matches = False
 
                         if matches:
                               print(f"\nTrade #{i + 1}")
@@ -1047,6 +1115,22 @@ while True:
                   setup_filter = input ("Setup: ").lower().strip()
                   session_filter = input ("Session: ").lower().strip()
 
+                  start_date_filter = get_optional_date(
+                        "Start date (YYYY-MM-DD): "
+                  )
+
+                  end_date_filter = get_optional_date(
+                        "End date (YYYY-MM-DD): "
+                  )
+
+                  if (
+                        start_date_filter is not None
+                        and end_date_filter is not None
+                        and end_date_filter < start_date_filter
+                  ):
+                        print("End date cannot be earlier than start date.")
+                        continue
+                  
                   filtered_trades = []
                   filtered_indices = []
 
@@ -1063,6 +1147,13 @@ while True:
                               matches = False 
                         if session_filter != "" and trade.get("session", "").lower().strip() != session_filter:
                               matches = False 
+
+                        if not trade_is_in_date_range(
+                              trade,
+                              start_date_filter,
+                              end_date_filter
+                        ):
+                              matches = False
 
                         if matches: 
                               filtered_trades.append(trade)
