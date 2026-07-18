@@ -38,18 +38,23 @@ def save_account(account):
             json.dump(account, file, indent=4)
 
 def show_menu():
-      print("\nAI Trading Journal")
+      print("\n========== AI TRADING JOURNAL ==========")
+      print()
       print("1. Account Status")
       print("2. Edit Account")
+      print()
       print("3. Add Trade")
       print("4. View Trades")
-      print("5. Delete Trade")
-      print("6. Edit Trade")
+      print("5. Edit Trade")
+      print("6. Delete Trade")
+      print()
       print("7. Trading Statistics")
       print("8. Search / Filter Trades")
       print("9. Filtered Statistics")
+      print()
       print("10. Save Trades")
       print("11. Export Trades to CSV")
+      print()
       print("12. Quit")
 
 def export_trades_to_csv(trades): 
@@ -624,51 +629,6 @@ while True:
 
       elif choice == "5":
             if len(trades) == 0:
-                  print("No trades to delete.")
-            else:
-                  for i in range(len(trades)):
-                        trade = trades[i]
-                        print(f"{i + 1}. {trade['symbol']} {trade['direction']} Points P/L: {trade['points_pnl']}")
-
-                  try:
-                        trade_number = int(input("Which trade number would you like to delete? "))
-                  except ValueError:
-                        print("Invalid trade number.")
-                        continue
-
-                  delete_index = trade_number - 1
-
-                  if 0 <= delete_index < len(trades):
-                        trade_to_delete = trades[delete_index]
-
-                        delete_net_result = trade_to_delete.get(
-                              "net_result",
-                              calculate_net_result(
-                                    trade_to_delete.get(
-                                          "net_dollar_pnl",
-                                          trade_to_delete.get("dollar_pnl", 0)
-                                    )
-                              )
-                        )
-
-                        confirm = input(
-                              f"Are you sure you want to delete "
-                              f"{trade_to_delete['symbol']} "
-                              f"({delete_net_result}, "
-                              f"{trade_to_delete['points_pnl']:,.2f} pts)? "
-                              f"(yes/no): "
-                        ).lower().strip()
-                        if confirm == "yes":
-                              removed_trade = trades.pop(delete_index)
-                              save_trades(trades)
-                              print(f"Deleted trade: {removed_trade['symbol']}")
-                        else:
-                              print("Delete cancelled.")
-                  else:
-                        print("Invalid trade number.")
-
-      elif choice == "6":
-            if len(trades) == 0:
                   print("No trades to edit.")
                   continue
 
@@ -892,8 +852,52 @@ while True:
                   print ("Trade updated successfully.")
             else:
                   print("Invalid trade number.")
-                  
-                  
+
+      elif choice == "6":
+            if len(trades) == 0:
+                  print("No trades to delete.")
+            else:
+                  for i in range(len(trades)):
+                        trade = trades[i]
+                        print(f"{i + 1}. {trade['symbol']} {trade['direction']} Points P/L: {trade['points_pnl']}")
+
+                  try:
+                        trade_number = int(input("Which trade number would you like to delete? "))
+                  except ValueError:
+                        print("Invalid trade number.")
+                        continue
+
+                  delete_index = trade_number - 1
+
+                  if 0 <= delete_index < len(trades):
+                        trade_to_delete = trades[delete_index]
+
+                        delete_net_result = trade_to_delete.get(
+                              "net_result",
+                              calculate_net_result(
+                                    trade_to_delete.get(
+                                          "net_dollar_pnl",
+                                          trade_to_delete.get("dollar_pnl", 0)
+                                    )
+                              )
+                        )
+
+                        confirm = input(
+                              f"Are you sure you want to delete "
+                              f"{trade_to_delete['symbol']} "
+                              f"({delete_net_result}, "
+                              f"{trade_to_delete['points_pnl']:,.2f} pts)? "
+                              f"(yes/no): "
+                        ).lower().strip()
+                        if confirm == "yes":
+                              removed_trade = trades.pop(delete_index)
+                              save_trades(trades)
+                              print(f"Deleted trade: {removed_trade['symbol']}")
+                        else:
+                              print("Delete cancelled.")
+                  else:
+                        print("Invalid trade number.")
+
       elif choice == "7":
             if len(trades) == 0:
                   print("No trades to calculate statistics.")
@@ -1160,136 +1164,161 @@ while True:
                         average_risk = 0 
                         average_realized_r = 0
 
-                  print("\nTrading Statistics")
-                  print(f"Total trades: {total_trades}")
-                  print(f"Wins: {wins}")
-                  print(f"Losses: {losses}")
-                  print(f"Break-even trades: {breakevens}")
-                  print(f"Win rate: {win_rate:.2f}%")
+                  print("\n" + "=" * 50)
+                  print("PERFORMANCE STATISTICS")
+                  print("=" * 50)
 
-                  print("\nPoints P/L Statistics")
-                  print(f"Total points P/L: {total_points_pnl:,.2f} pts")
-                  print(f"Average points P/L: {average_points_pnl:.2f} pts")
+                  print()
+                  print("-" * 31)
+                  print("GENERAL PERFORMANCE")
+                  print("-" * 31)
+                  print()
+                  print(f"{'Total Trades:':<27}{total_trades}")
+                  print(f"{'Wins:':<27}{wins}")
+                  print(f"{'Losses:':<27}{losses}")
+                  print(f"{'Break-even Trades:':<27}{breakevens}")
+                  print(f"{'Win Rate:':<27}{win_rate:.2f}%")
+
+                  print()
+                  print("-" * 31)
+                  print("POINTS PERFORMANCE")
+                  print("-" * 31)
+                  print()
+                  print(f"{'Total Points:':<27}{total_points_pnl:,.2f} pts")
+                  print(f"{'Average Points per Trade:':<27}{average_points_pnl:.2f} pts")
                   print(
-                        f"Best Points Trade: #{best_points_idx + 1} {best_points_trade['symbol']} "
+                        f"{'Best Trade:':<27}#{best_points_idx + 1} {best_points_trade['symbol']} "
                         f"({best_points_trade['points_pnl']:.2f} pts)"
                   )
                   print(
-                        f"Worst Points Trade: #{worst_points_idx + 1} {worst_points_trade['symbol']} "
+                        f"{'Worst Trade:':<27}#{worst_points_idx + 1} {worst_points_trade['symbol']} "
                         f"({worst_points_trade['points_pnl']:.2f} pts)"
                   )
-                  print(f"Gross Points Profit: {gross_points_profit:,.2f} pts")
-                  print(f"Gross Points Loss: -{gross_points_loss:,.2f} pts")
-                  print(f"Average Points Win: {average_points_win:,.2f} pts")
-                  print(f"Average Points Loss: -{average_points_loss:,.2f} pts")
+                  print(f"{'Gross Points Profit:':<27}{gross_points_profit:,.2f} pts")
+                  print(f"{'Gross Points Loss:':<27}-{gross_points_loss:,.2f} pts")
+                  print(f"{'Average Points Win:':<27}{average_points_win:,.2f} pts")
+                  print(f"{'Average Points Loss:':<27}-{average_points_loss:,.2f} pts")
 
                   if points_profit_factor is None:
-                        print("Points Profit Factor: N/A (no losing trades)")
+                        print(f"{'Points Profit Factor:':<27}N/A (no losing trades)")
                   else:
-                        print(f"Points Profit Factor: {points_profit_factor:.2f}")
+                        print(f"{'Points Profit Factor:':<27}{points_profit_factor:.2f}")
 
-                  print(f"Points Expectancy: {points_expectancy:.2f} pts")
+                  print(f"{'Points Expectancy:':<27}{points_expectancy:.2f} pts")
 
-                  print("\nGross Dollar P/L Statistics")
-                  print(f"Total dollar P/L: ${total_dollar_pnl:,.2f}")
-                  print(f"Average dollar P/L: ${average_dollar_pnl:,.2f}")
+                  print()
+                  print("-" * 31)
+                  print("GROSS DOLLAR PERFORMANCE")
+                  print("-" * 31)
+                  print()
+                  print(f"{'Total Gross Dollar P/L:':<27}${total_dollar_pnl:,.2f}")
+                  print(f"{'Average Gross Dollar P/L:':<27}${average_dollar_pnl:,.2f}")
                   print(
-                        f"Best Dollar Trade: #{best_dollar_idx + 1} {best_dollar_trade['symbol']} "
+                        f"{'Best Dollar Trade:':<27}#{best_dollar_idx + 1} {best_dollar_trade['symbol']} "
                         f"(${best_dollar_trade.get('dollar_pnl', 0):,.2f})"
                   )
                   print(
-                        f"Worst Dollar Trade: #{worst_dollar_idx + 1} {worst_dollar_trade['symbol']} "
+                        f"{'Worst Dollar Trade:':<27}#{worst_dollar_idx + 1} {worst_dollar_trade['symbol']} "
                         f"(${worst_dollar_trade.get('dollar_pnl', 0):,.2f})"
                   )
-                  print(f"Gross Dollar Profit: ${gross_dollar_profit:,.2f}")
-                  print(f"Gross Dollar Loss: -${gross_dollar_loss:,.2f}")
-                  print(f"Average Dollar Win: ${average_dollar_win:,.2f}")
-                  print(f"Average Dollar Loss: -${average_dollar_loss:,.2f}")
+                  print(f"{'Gross Profit:':<27}${gross_dollar_profit:,.2f}")
+                  print(f"{'Gross Loss:':<27}-${gross_dollar_loss:,.2f}")
+                  print(f"{'Average Gross Winner:':<27}${average_dollar_win:,.2f}")
+                  print(f"{'Average Gross Loser:':<27}-${average_dollar_loss:,.2f}")
 
                   if dollar_profit_factor is None:
-                        print("Dollar Profit Factor: N/A (no losing trades)")
+                        print(f"{'Profit Factor:':<27}N/A (no losing trades)")
                   else:
-                        print(f"Dollar Profit Factor: {dollar_profit_factor:.2f}")
+                        print(f"{'Profit Factor:':<27}{dollar_profit_factor:.2f}")
 
-                  print(f"Dollar Expectancy: ${dollar_expectancy:,.2f}")
+                  print(f"{'Expectancy:':<27}${dollar_expectancy:,.2f}")
 
-                  print("\nCommission and Net Dollar P/L Statistics")
-                  print(f"Net Wins: {net_wins}")
-                  print(f"Net Losses: {net_losses}")
-                  print(f"Net Break-even Trades: {net_breakevens}")
-                  print(f"Net Win Rate: {net_win_rate:.2f}%")
-                  print(f"Total commission: ${total_commission:,.2f}")
-                  print(f"Average commission: ${average_commission:,.2f}")
+                  print("\n" + "=" * 50)
+                  print("COMMISSION & NET PERFORMANCE")
+                  print("=" * 50)
+                  print()
+                  print(f"{'Total Commission:':<27}${total_commission:,.2f}")
+                  print(f"{'Average Commission:':<27}${average_commission:,.2f}")
                   print(
-                        f"Total net dollar P/L: "
+                        f"{'Total Net Dollar P/L:':<27}"
                         f"${total_net_dollar_pnl:,.2f}"
                   )
 
                   print(
-                        f"Average net dollar P/L: "
+                        f"{'Average Net Dollar P/L:':<27}"
                         f"${average_net_dollar_pnl:,.2f}"
                   )
 
                   print(
-                        f"Best Net Trade: #{best_net_idx + 1} "
+                        f"{'Best Net Trade:':<27}#{best_net_idx + 1} "
                         f"{best_net_trade['symbol']} "
                         f"(${best_net_trade.get('net_dollar_pnl', best_net_trade.get('dollar_pnl', 0)):,.2f})"
                   )
 
                   print(
-                        f"Worst Net Trade: #{worst_net_idx + 1} "
+                        f"{'Worst Net Trade:':<27}#{worst_net_idx + 1} "
                         f"{worst_net_trade['symbol']} "
                         f"(${worst_net_trade.get('net_dollar_pnl', worst_net_trade.get('dollar_pnl', 0)):,.2f})"
                   )
 
-                  print(f"Gross Net Profit: ${gross_net_profit:,.2f}")
-                  print(f"Gross Net Loss: -${gross_net_loss:,.2f}")
-                  print(f"Average Net Win: ${average_net_win:,.2f}")
-                  print(f"Average Net Loss: -${average_net_loss:,.2f}")
+                  print(f"{'Gross Net Profit:':<27}${gross_net_profit:,.2f}")
+                  print(f"{'Gross Net Loss:':<27}-${gross_net_loss:,.2f}")
+                  print(f"{'Average Net Winner:':<27}${average_net_win:,.2f}")
+                  print(f"{'Average Net Loser:':<27}-${average_net_loss:,.2f}")
 
                   if net_profit_factor is None:
-                        print("Net Profit Factor: N/A (no losing trades)")
+                        print(f"{'Net Profit Factor:':<27}N/A (no losing trades)")
                   else:
-                        print(f"Net Profit Factor: {net_profit_factor:.2f}")
+                        print(f"{'Net Profit Factor:':<27}{net_profit_factor:.2f}")
 
-                  print(f"Net Expectancy: ${net_expectancy:,.2f}")
+                  print(f"{'Net Expectancy:':<27}${net_expectancy:,.2f}")
+                  print(f"{'Net Wins:':<27}{net_wins}")
+                  print(f"{'Net Losses:':<27}{net_losses}")
+                  print(f"{'Net Break-even Trades:':<27}{net_breakevens}")
+                  print(f"{'Net Win Rate:':<27}{net_win_rate:.2f}%")
 
-                  print("\nRisk Statistics")
-                  print(f"Average Risk: ${average_risk:,.2f}")
-                  print(f"Average Realized R: {average_realized_r:.2f}R")
+                  print("\n" + "=" * 50)
+                  print("RISK ANALYTICS")
+                  print("=" * 50)
+                  print()
+                  print(f"{'Average Risk:':<27}${average_risk:,.2f}")
+                  print(f"{'Average Realized R:':<27}{average_realized_r:.2f}R")
 
                   if best_r_trade is not None:
                         print(
-                              f"Best R Trade: #{best_r_idx + 1} "
+                              f"{'Best R Trade:':<27}#{best_r_idx + 1} "
                               f"{best_r_trade['symbol']} "
                               f"({best_r_trade.get('realized_r', 0):.2f}R)"
                         )
                   else:
-                        print("Best R Trade: N/A")
+                        print(f"{'Best R Trade:':<27}N/A")
                   if worst_r_trade is not None:
                         print(
-                              f"Worst R Trade: #{worst_r_idx + 1} "
+                              f"{'Worst R Trade:':<27}#{worst_r_idx + 1} "
                               f"{worst_r_trade['symbol']} "
                               f"({worst_r_trade.get('realized_r', 0):.2f}R)"
                         )
                   else:
-                        print("Worst R Trade: N/A")
+                        print(f"{'Worst R Trade:':<27}N/A")
 
-                  print("\nTrade Duration Statistics")
-                  print(f"Average trade duration: {average_duration:.2f} minutes")
+                  print("\n" + "=" * 50)
+                  print("TRADE DURATION")
+                  print("=" * 50)
+                  print()
+                  print(f"{'Average Trade Duration:':<27}{average_duration:.2f} minutes")
                   if timed_trades > 0:
-                        print(f"Longest trade duration: {longest_duration} minutes")
-                        print(f"Shortest trade duration: {shortest_duration} minutes")
+                        print(f"{'Longest trade duration:':<27}{longest_duration} minutes")
+                        print(f"{'Shortest trade duration:':<27}{shortest_duration} minutes")
                   else:
-                        print("Longest trade duration: N/A")
-                        print("Shortest trade duration: N/A")
+                        print(f"{'Longest trade duration:':<27}N/A")
+                        print(f"{'Shortest trade duration:':<27}N/A")
 
                   if earliest_entry_time is not None:
-                        print(f"Earliest entry time: {earliest_entry_time.strftime('%H:%M')}")
-                        print(f"Latest entry time: {latest_entry_time.strftime('%H:%M')}")
+                        print(f"{'Earliest entry time:':<27}{earliest_entry_time.strftime('%H:%M')}")
+                        print(f"{'Latest entry time:':<27}{latest_entry_time.strftime('%H:%M')}")
                   else:
-                        print("Earliest entry time: N/A")
-                        print("Latest entry time: N/A")
+                        print(f"{'Earliest entry time:':<27}N/A")
+                        print(f"{'Latest entry time:':<27}N/A")
 
       elif choice == "8":
             if len(trades) == 0:
@@ -1744,142 +1773,167 @@ while True:
                         points_expectancy = average_points_pnl
                         dollar_expectancy = average_dollar_pnl
 
-                        print("\nFiltered Trading Statistics")
-                        print(f"Total trades: {total_trades}")
-                        print(f"Wins: {wins}")
-                        print(f"Losses: {losses}")
-                        print(f"Break-even trades: {breakevens}")
-                        print(f"Win rate: {win_rate:.2f}%")
+                        print("\n" + "=" * 50)
+                        print("PERFORMANCE STATISTICS")
+                        print("=" * 50)
 
-                        print("\nPoints P/L Statistics")
-                        print(f"Total points P/L: {total_points_pnl:,.2f} pts")
-                        print(f"Average points P/L: {average_points_pnl:.2f} pts")
+                        print()
+                        print("-" * 31)
+                        print("GENERAL PERFORMANCE")
+                        print("-" * 31)
+                        print()
+                        print(f"{'Total Trades:':<27}{total_trades}")
+                        print(f"{'Wins:':<27}{wins}")
+                        print(f"{'Losses:':<27}{losses}")
+                        print(f"{'Break-even Trades:':<27}{breakevens}")
+                        print(f"{'Win Rate:':<27}{win_rate:.2f}%")
+
+                        print()
+                        print("-" * 31)
+                        print("POINTS PERFORMANCE")
+                        print("-" * 31)
+                        print()
+                        print(f"{'Total Points:':<27}{total_points_pnl:,.2f} pts")
+                        print(f"{'Average Points per Trade:':<27}{average_points_pnl:.2f} pts")
                         print(
-                              f"Best Points Trade: #{best_points_idx + 1} {best_points_trade['symbol']} "
+                              f"{'Best Trade:':<27}#{best_points_idx + 1} {best_points_trade['symbol']} "
                               f"({best_points_trade['points_pnl']:.2f} pts)"
                         )
                         print(
-                              f"Worst Points Trade: #{worst_points_idx + 1} {worst_points_trade['symbol']} "
+                              f"{'Worst Trade:':<27}#{worst_points_idx + 1} {worst_points_trade['symbol']} "
                               f"({worst_points_trade['points_pnl']:.2f} pts)"
                         )
-                        print(f"Gross Points Profit: {gross_points_profit:,.2f} pts")
-                        print(f"Gross Points Loss: -{gross_points_loss:,.2f} pts")
-                        print(f"Average Points Win: {average_points_win:,.2f} pts")
-                        print(f"Average Points Loss: -{average_points_loss:,.2f} pts")
+                        print(f"{'Gross Points Profit:':<27}{gross_points_profit:,.2f} pts")
+                        print(f"{'Gross Points Loss:':<27}-{gross_points_loss:,.2f} pts")
+                        print(f"{'Average Points Win:':<27}{average_points_win:,.2f} pts")
+                        print(f"{'Average Points Loss:':<27}-{average_points_loss:,.2f} pts")
 
                         if points_profit_factor is None:
-                              print("Points Profit Factor: N/A (no losing trades)")
+                              print(f"{'Points Profit Factor:':<27}N/A (no losing trades)")
                         else:
-                              print(f"Points Profit Factor: {points_profit_factor:.2f}")
-                        
-                        print(f"Points Expectancy: {points_expectancy:.2f} pts")
+                              print(f"{'Points Profit Factor:':<27}{points_profit_factor:.2f}")
 
-                        print("\nGross Dollar P/L Statistics")
-                        print(f"Total dollar P/L: ${total_dollar_pnl:,.2f}")
-                        print(f"Average dollar P/L: ${average_dollar_pnl:,.2f}")
+                        print(f"{'Points Expectancy:':<27}{points_expectancy:.2f} pts")
+
+                        print()
+                        print("-" * 31)
+                        print("GROSS DOLLAR PERFORMANCE")
+                        print("-" * 31)
+                        print()
+                        print(f"{'Total Gross Dollar P/L:':<27}${total_dollar_pnl:,.2f}")
+                        print(f"{'Average Gross Dollar P/L:':<27}${average_dollar_pnl:,.2f}")
                         print(
-                              f"Best Dollar Trade: #{best_dollar_idx + 1} {best_dollar_trade['symbol']} "
+                              f"{'Best Dollar Trade:':<27}#{best_dollar_idx + 1} {best_dollar_trade['symbol']} "
                               f"(${best_dollar_trade.get('dollar_pnl', 0):,.2f})"
                         )
                         print(
-                              f"Worst Dollar Trade: #{worst_dollar_idx + 1} {worst_dollar_trade['symbol']} "
+                              f"{'Worst Dollar Trade:':<27}#{worst_dollar_idx + 1} {worst_dollar_trade['symbol']} "
                               f"(${worst_dollar_trade.get('dollar_pnl', 0):,.2f})"
                         )
-                        print(f"Gross Dollar Profit: ${gross_dollar_profit:,.2f}")
-                        print(f"Gross Dollar Loss: -${gross_dollar_loss:,.2f}")
-                        print(f"Average Dollar Win: ${average_dollar_win:,.2f}")
-                        print(f"Average Dollar Loss: -${average_dollar_loss:,.2f}")
+                        print(f"{'Gross Profit:':<27}${gross_dollar_profit:,.2f}")
+                        print(f"{'Gross Loss:':<27}-${gross_dollar_loss:,.2f}")
+                        print(f"{'Average Gross Winner:':<27}${average_dollar_win:,.2f}")
+                        print(f"{'Average Gross Loser:':<27}-${average_dollar_loss:,.2f}")
 
                         if dollar_profit_factor is None:
-                              print("Dollar Profit Factor: N/A (no losing trades)")
+                              print(f"{'Profit Factor:':<27}N/A (no losing trades)")
                         else:
-                              print(f"Dollar Profit Factor: {dollar_profit_factor:.2f}")
+                              print(f"{'Profit Factor:':<27}{dollar_profit_factor:.2f}")
 
-                        print(f"Dollar Expectancy: ${dollar_expectancy:,.2f}")
+                        print(f"{'Expectancy:':<27}${dollar_expectancy:,.2f}")
 
-                        print("\nCommission and Net Dollar P/L Statistics")
-                        print(f"Net Wins: {net_wins}")
-                        print(f"Net Losses: {net_losses}")
-                        print(f"Net Break-even Trades: {net_breakevens}")
-                        print(f"Net Win Rate: {net_win_rate:.2f}%")
-                        print(f"Total commission: ${total_commission:,.2f}")
-                        print(f"Average commission: ${average_commission:,.2f}")
+                        print("\n" + "=" * 50)
+                        print("COMMISSION & NET PERFORMANCE")
+                        print("=" * 50)
+                        print()
+                        print(f"{'Total Commission:':<27}${total_commission:,.2f}")
+                        print(f"{'Average Commission:':<27}${average_commission:,.2f}")
                         print(
-                              f"Total net dollar P/L: "
+                              f"{'Total Net Dollar P/L:':<27}"
                               f"${total_net_dollar_pnl:,.2f}"
                         )
 
                         print(
-                              f"Average net dollar P/L: "
+                              f"{'Average Net Dollar P/L:':<27}"
                               f"${average_net_dollar_pnl:,.2f}"
                         )
 
                         print(
-                              f"Best Net Trade: #{best_net_idx + 1} "
+                              f"{'Best Net Trade:':<27}#{best_net_idx + 1} "
                               f"{best_net_trade['symbol']} "
                               f"(${best_net_trade.get('net_dollar_pnl', best_net_trade.get('dollar_pnl', 0)):,.2f})"
                         )
 
                         print(
-                              f"Worst Net Trade: #{worst_net_idx + 1} "
+                              f"{'Worst Net Trade:':<27}#{worst_net_idx + 1} "
                               f"{worst_net_trade['symbol']} "
                               f"(${worst_net_trade.get('net_dollar_pnl', worst_net_trade.get('dollar_pnl', 0)):,.2f})"
                         )
 
-                        print(f"Gross Net Profit: ${gross_net_profit:,.2f}")
-                        print(f"Gross Net Loss: -${gross_net_loss:,.2f}")
-                        print(f"Average Net Win: ${average_net_win:,.2f}")
-                        print(f"Average Net Loss: -${average_net_loss:,.2f}")
+                        print(f"{'Gross Net Profit:':<27}${gross_net_profit:,.2f}")
+                        print(f"{'Gross Net Loss:':<27}-${gross_net_loss:,.2f}")
+                        print(f"{'Average Net Winner:':<27}${average_net_win:,.2f}")
+                        print(f"{'Average Net Loser:':<27}-${average_net_loss:,.2f}")
 
                         if net_profit_factor is None:
-                              print("Net Profit Factor: N/A (no losing trades)")
+                              print(f"{'Net Profit Factor:':<27}N/A (no losing trades)")
                         else:
-                              print(f"Net Profit Factor: {net_profit_factor:.2f}")
+                              print(f"{'Net Profit Factor:':<27}{net_profit_factor:.2f}")
 
-                        print(f"Net Expectancy: ${net_expectancy:,.2f}")
+                        print(f"{'Net Expectancy:':<27}${net_expectancy:,.2f}")
+                        print(f"{'Net Wins:':<27}{net_wins}")
+                        print(f"{'Net Losses:':<27}{net_losses}")
+                        print(f"{'Net Break-even Trades:':<27}{net_breakevens}")
+                        print(f"{'Net Win Rate:':<27}{net_win_rate:.2f}%")
 
                         if timed_trades > 0:
                               average_duration = total_duration / timed_trades
                         else:
                               average_duration = 0
 
-                        print("\nRisk Statistics")
-                        print(f"Average Risk: ${average_risk:,.2f}")
-                        print(f"Average Realized R: {average_realized_r:.2f}R")
+                        print("\n" + "=" * 50)
+                        print("RISK ANALYTICS")
+                        print("=" * 50)
+                        print()
+                        print(f"{'Average Risk:':<27}${average_risk:,.2f}")
+                        print(f"{'Average Realized R:':<27}{average_realized_r:.2f}R")
 
                         if best_r_trade is not None:
                               print(
-                                    f"Best R Trade: #{best_r_idx + 1} "
+                                    f"{'Best R Trade:':<27}#{best_r_idx + 1} "
                                     f"{best_r_trade['symbol']} "
                                     f"({best_r_trade.get('realized_r', 0):.2f}R)"
                               )
                         else:
-                              print("Best R Trade: N/A")
+                              print(f"{'Best R Trade:':<27}N/A")
 
                         if worst_r_trade is not None:
                               print(
-                                    f"Worst R Trade: #{worst_r_idx + 1} "
+                                    f"{'Worst R Trade:':<27}#{worst_r_idx + 1} "
                                     f"{worst_r_trade['symbol']} "
                                     f"({worst_r_trade.get('realized_r', 0):.2f}R)"
                               )
                         else:
-                              print("Worst R Trade: N/A")
+                              print(f"{'Worst R Trade:':<27}N/A")
 
-                        print("\nTrade Duration Statistics")
-                        print(f"Average trade duration: {average_duration:.2f} minutes")
+                        print("\n" + "=" * 50)
+                        print("TRADE DURATION")
+                        print("=" * 50)
+                        print()
+                        print(f"{'Average Trade Duration:':<27}{average_duration:.2f} minutes")
                         if timed_trades > 0:
-                              print(f"Longest trade duration: {longest_duration} minutes")
-                              print(f"Shortest trade duration: {shortest_duration} minutes")
+                              print(f"{'Longest trade duration:':<27}{longest_duration} minutes")
+                              print(f"{'Shortest trade duration:':<27}{shortest_duration} minutes")
                         else:
-                              print("Longest trade duration: N/A")
-                              print("Shortest trade duration: N/A")
+                              print(f"{'Longest trade duration:':<27}N/A")
+                              print(f"{'Shortest trade duration:':<27}N/A")
 
                         if earliest_entry_time is not None:
-                              print(f"Earliest entry time: {earliest_entry_time.strftime('%H:%M')}")
-                              print(f"Latest entry time: {latest_entry_time.strftime('%H:%M')}")
+                              print(f"{'Earliest entry time:':<27}{earliest_entry_time.strftime('%H:%M')}")
+                              print(f"{'Latest entry time:':<27}{latest_entry_time.strftime('%H:%M')}")
                         else:
-                              print("Earliest entry time: N/A")
-                              print("Latest entry time: N/A")
+                              print(f"{'Earliest entry time:':<27}N/A")
+                              print(f"{'Latest entry time:':<27}N/A")
 
       elif choice == "10":
             save_trades(trades)
