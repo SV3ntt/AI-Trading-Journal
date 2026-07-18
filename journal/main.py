@@ -556,7 +556,7 @@ while True:
 
                         print(
                               f"  {i + 1}. {trade['symbol'].upper()} | "
-                              f"{trade.get('trade_date', 'N/A')} | "
+                              f"{trade.get('trade_date', 'N/A').replace('-', ' ')} | "
                               f"{trade['direction']} | "
                               f"{trade.get('net_result', trade.get('result', 'N/A'))} | "
                               f"{trade['points_pnl']:,.2f} pts | "
@@ -581,7 +581,7 @@ while True:
                         print(f"\nTrade #{view_number}")
                         print(f"Symbol: {trade['symbol']}")
                         print(f"Direction: {trade['direction']}")
-                        print(f"Date: {trade.get('trade_date', 'N/A')}")
+                        print(f"Date: {trade.get('trade_date', 'N/A').replace('-', ' ')}")
 
                         print(f"Entry: {trade['entry']}")
                         print(f"Exit: {trade['exit']}")
@@ -1396,7 +1396,7 @@ while True:
                               print(f"\nTrade #{i + 1}")
                               print(f"Symbol: {trade['symbol']}")
                               print(f"Direction: {trade['direction']}")
-                              print(f"Date: {trade.get('trade_date', 'N/A')}")
+                              print(f"Date: {trade.get('trade_date', 'N/A').replace('-', ' ')}")
 
                               print(f"Entry: {trade['entry']}")
                               print(f"Exit: {trade['exit']}")

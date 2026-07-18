@@ -219,13 +219,39 @@ AI-Trading-Journal/
 
 # 📸 Screenshots
 
-*Coming Soon*
 
-- Main Menu
-- Account Status
-- Trading Statistics
-- Search & Filter
-- Trade Details
+## Main Menu Screenshot
+
+![Main Menu](Main-Menu.png)
+
+---
+
+## Account Status Screenshot
+
+![Account Status](Account-Status.png)
+
+---
+
+## Trade Summary Screenshot
+
+![Trade Summary](Trade-Summary.png)
+
+---
+
+## Trading Statistics
+
+### Performance Statistics Screenshot
+
+![Performance Statistics](Performance-Statistics.png)
+![Performance Statistics](Performance-Statistics.png)
+
+### Commission & Net Performance Screenshot
+
+![Commission & Net Performance](Commission-&-Net-Performance.png)
+
+### Risk Analytics Screenshot
+
+![Risk Analytics](Risk-Analytics.png)
 
 ---
 
