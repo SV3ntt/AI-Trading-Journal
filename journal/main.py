@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta
 
 valid_directions = ("long", "short")
-
+data_dir = "data"
 def load_trades():
       try:
             with open("data/trades.json", "r") as file:
@@ -171,6 +171,54 @@ def calculate_net_result(net_dollar_pnl):
       else:
             return "Break-even"
 
+def calculate_streaks(trades):
+      if len(trades) == 0:
+            return {
+                  "current_type": "None",
+                  "current_length": 0,
+                  "longest_winning": 0,
+                  "longest_losing": 0
+            }
+
+      current_streak_type = None
+      current_streak_length = 0
+      longest_winning = 0
+      longest_losing = 0
+
+      for trade in trades:
+            result = trade.get("net_result", trade.get("result", "Break-even"))
+
+            if result == "Win":
+                  if current_streak_type == "Win":
+                        current_streak_length += 1
+                  else:
+                        current_streak_type = "Win"
+                        current_streak_length = 1
+
+                  if current_streak_length > longest_winning:
+                        longest_winning = current_streak_length
+
+            elif result == "Loss":
+                  if current_streak_type == "Loss":
+                        current_streak_length += 1
+                  else:
+                        current_streak_type = "Loss"
+                        current_streak_length = 1
+
+                  if current_streak_length > longest_losing:
+                        longest_losing = current_streak_length
+
+            else:
+                  current_streak_type = None
+                  current_streak_length = 0
+
+      return {
+            "current_type": current_streak_type if current_streak_type is not None else "None",
+            "current_length": current_streak_length,
+            "longest_winning": longest_winning,
+            "longest_losing": longest_losing
+      }
+
 def calculate_duration(entry_time, exit_time):
       entry_datetime = datetime.strptime(entry_time, "%H:%M")
       exit_datetime = datetime.strptime(exit_time, "%H:%M")
@@ -294,16 +342,26 @@ while True:
             net_profit = total_net_dollar_pnl
             growth_percentage = (net_profit / starting_balance) * 100 if starting_balance != 0 else 0
 
-            high_water_mark = account.get("high_water_mark", starting_balance)
+            old_high_water_mark = account.get("high_water_mark", starting_balance)
 
-            if current_balance > high_water_mark:
-                  high_water_mark = current_balance
+            running_balance = starting_balance
+            high_water_mark = starting_balance
+
+            for trade in trades:
+                  running_balance += trade.get(
+                        "net_dollar_pnl",
+                        trade.get("dollar_pnl", 0)
+                  )
+                  if running_balance > high_water_mark:
+                        high_water_mark = running_balance
+
+            if high_water_mark != old_high_water_mark:
                   account["high_water_mark"] = high_water_mark
                   save_account(account)
-                  
-            drawdown = current_balance - high_water_mark
 
-            if high_water_mark > 0: 
+            drawdown = high_water_mark - current_balance
+
+            if high_water_mark > 0:
                   drawdown_percentage = (drawdown / high_water_mark) * 100
             else:
                   drawdown_percentage = 0
@@ -327,10 +385,10 @@ while True:
                   print("Net P/L: $0.00")
                   print("Growth: 0.00%")
             
-            if drawdown < 0:
-                  print(f"Drawdown: ${drawdown:,.2f}")
-                  print(f"Drawdown Percentage: {drawdown_percentage:.2f}%")
-            else: 
+            if drawdown > 0:
+                  print(f"Drawdown: -${drawdown:,.2f}")
+                  print(f"Drawdown Percentage: -{drawdown_percentage:.2f}%")
+            else:
                   print("Drawdown: $0.00")
                   print("Drawdown Percentage: 0.00%")
                   
@@ -1320,6 +1378,38 @@ while True:
                         print(f"{'Earliest entry time:':<27}N/A")
                         print(f"{'Latest entry time:':<27}N/A")
 
+                  streaks = calculate_streaks(trades)
+
+                  if streaks["current_type"] == "Win":
+                        current_streak_display = (
+                              f"{streaks['current_length']} Win"
+                              + ("s" if streaks["current_length"] != 1 else "")
+                        )
+                  elif streaks["current_type"] == "Loss":
+                        current_streak_display = (
+                              f"{streaks['current_length']} Loss"
+                              + ("es" if streaks["current_length"] != 1 else "")
+                        )
+                  else:
+                        current_streak_display = "No Active Streak"
+
+                  longest_winning_display = (
+                        f"{streaks['longest_winning']} Win"
+                        + ("s" if streaks["longest_winning"] != 1 else "")
+                  )
+                  longest_losing_display = (
+                        f"{streaks['longest_losing']} Loss"
+                        + ("es" if streaks["longest_losing"] != 1 else "")
+                  )
+
+                  print("\n" + "=" * 50)
+                  print("STREAK ANALYTICS")
+                  print("=" * 50)
+                  print()
+                  print(f"{'Current Streak:':<27}{current_streak_display}")
+                  print(f"{'Longest Winning Streak:':<27}{longest_winning_display}")
+                  print(f"{'Longest Losing Streak:':<27}{longest_losing_display}")
+
       elif choice == "8":
             if len(trades) == 0:
                   print("No trades to search")
@@ -1934,6 +2024,38 @@ while True:
                         else:
                               print(f"{'Earliest entry time:':<27}N/A")
                               print(f"{'Latest entry time:':<27}N/A")
+
+                        streaks = calculate_streaks(filtered_trades)
+
+                        if streaks["current_type"] == "Win":
+                              current_streak_display = (
+                                    f"{streaks['current_length']} Win"
+                                    + ("s" if streaks["current_length"] != 1 else "")
+                              )
+                        elif streaks["current_type"] == "Loss":
+                              current_streak_display = (
+                                    f"{streaks['current_length']} Loss"
+                                    + ("es" if streaks["current_length"] != 1 else "")
+                              )
+                        else:
+                              current_streak_display = "No Active Streak"
+
+                        longest_winning_display = (
+                              f"{streaks['longest_winning']} Win"
+                              + ("s" if streaks["longest_winning"] != 1 else "")
+                        )
+                        longest_losing_display = (
+                              f"{streaks['longest_losing']} Loss"
+                              + ("es" if streaks["longest_losing"] != 1 else "")
+                        )
+
+                        print("\n" + "=" * 50)
+                        print("STREAK ANALYTICS")
+                        print("=" * 50)
+                        print()
+                        print(f"{'Current Streak:':<27}{current_streak_display}")
+                        print(f"{'Longest Winning Streak:':<27}{longest_winning_display}")
+                        print(f"{'Longest Losing Streak:':<27}{longest_losing_display}")
 
       elif choice == "10":
             save_trades(trades)

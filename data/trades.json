@@ -142,5 +142,29 @@
         "session": "",
         "notes": "",
         "mistake": ""
+    },
+    {
+        "symbol": "mes",
+        "direction": "long",
+        "entry": 7564.5,
+        "exit": 7580.75,
+        "contracts": 8,
+        "point_value": 5.0,
+        "points_pnl": 16.25,
+        "dollar_pnl": 650.0,
+        "commission": 41.0,
+        "net_dollar_pnl": 609.0,
+        "result": "Win",
+        "net_result": "Win",
+        "risk_amount": 300.0,
+        "realized_r": 2.03,
+        "trade_date": "2026-09-08",
+        "entry_time": "10:01",
+        "exit_time": "10:17",
+        "duration": 16,
+        "setup": "",
+        "session": "",
+        "notes": "",
+        "mistake": ""
     }
 ]
