@@ -2,6 +2,12 @@
 __pycache__/
 *.py[cod]
 
+# Personal trading data
+data/trades.json
+data/account.json
+data/trades_backup*.json
+data/trades_export_*.csv
+
 # Virtual environments
 venv/
 .venv/

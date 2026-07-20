@@ -1,16 +1,63 @@
 import csv
 import json
-from datetime import datetime, timedelta
+import shutil
+from datetime import datetime, timedelta, time as dt_time
 
 valid_directions = ("long", "short")
 data_dir = "data"
+MAINTENANCE_SESSION_NAME = "Market Maintenance / Outside Sessions"
+SESSION_DISPLAY_ORDER = (
+      "Sydney",
+      "Sydney/Asia Overlap",
+      "Asia/London Overlap",
+      "London",
+      "New York/London Overlap",
+      "New York",
+      MAINTENANCE_SESSION_NAME,
+)
 def load_trades():
       try:
-            with open("data/trades.json", "r") as file:
+            with open(f"{data_dir}/trades.json", "r") as file:
                   trades = json.load(file)
+                  migrated = False
+
                   for trade in trades:
                         if "pnl" in trade and "points_pnl" not in trade:
                               trade["points_pnl"] = trade["pnl"]
+
+                        derived_session = determine_session(trade.get("entry_time"))
+
+                        if derived_session is not None:
+                              recalculated_session = derived_session
+                        else:
+                              recalculated_session = normalize_session_name(trade.get("session", ""))
+
+                        if trade.get("session") != recalculated_session:
+                              trade["session"] = recalculated_session
+                              migrated = True
+
+                        risk_amount = trade.get("risk_amount", 0)
+
+                        if "dollar_pnl" in trade and risk_amount > 0:
+                              recalculated_realized_r = calculate_realized_r(
+                                    trade["dollar_pnl"],
+                                    risk_amount
+                              )
+
+                              if trade.get("realized_r") != recalculated_realized_r:
+                                    trade["realized_r"] = recalculated_realized_r
+                                    migrated = True
+
+                  if migrated:
+                        backup_path = f"{data_dir}/trades_backup.json"
+                        try:
+                              shutil.copy2(f"{data_dir}/trades.json", backup_path)
+                              print(f"Existing trade data required updates (session and/or Realized R). A safety copy of the previous file was saved to {backup_path}.")
+                        except OSError as e:
+                              print(f"Warning: could not create a backup copy before updating trades.json: {e}")
+
+                        save_trades(trades)
+
                   return trades
       except FileNotFoundError:
             return []
@@ -19,7 +66,7 @@ def load_trades():
             return []
 
 def save_trades(trades):
-      with open("data/trades.json", "w") as file:
+      with open(f"{data_dir}/trades.json", "w") as file:
             json.dump(trades, file, indent=4)
 
 def load_account(): 
@@ -51,11 +98,12 @@ def show_menu():
       print("7. Trading Statistics")
       print("8. Search / Filter Trades")
       print("9. Filtered Statistics")
+      print("10. Session Analytics")
       print()
-      print("10. Save Trades")
-      print("11. Export Trades to CSV")
+      print("11. Save Trades")
+      print("12. Export Trades to CSV")
       print()
-      print("12. Quit")
+      print("13. Quit")
 
 def export_trades_to_csv(trades): 
       if len(trades) == 0:
@@ -218,6 +266,291 @@ def calculate_streaks(trades):
             "longest_winning": longest_winning,
             "longest_losing": longest_losing
       }
+
+def normalize_session_name(session):
+      if session is None:
+            return "Unspecified"
+
+      session_text = str(session).strip().lower()
+
+      if session_text == "":
+            return "Unspecified"
+
+      session_aliases = {
+            "ny": "New York",
+            "ny session": "New York",
+            "new york": "New York",
+            "new york session": "New York",
+
+            "lon": "London",
+            "london": "London",
+            "london session": "London",
+
+            "as": "Asia",
+            "asia": "Asia",
+            "asian": "Asia",
+            "asia session": "Asia",
+            "asian session": "Asia",
+
+            "sydney": "Sydney",
+            "syd": "Sydney",
+            "sydney session": "Sydney",
+
+            "london/new york": "New York/London Overlap",
+            "new york/london": "New York/London Overlap",
+            "ny/lon": "New York/London Overlap",
+            "lon/ny": "New York/London Overlap",
+            "london/ny": "New York/London Overlap",
+            "ny/london": "New York/London Overlap",
+            "new york/lon": "New York/London Overlap",
+            "new york/lon overlap": "New York/London Overlap",
+            "new york/london overlap": "New York/London Overlap",
+            "ny/london overlap": "New York/London Overlap",
+            "london new york overlap": "New York/London Overlap",
+
+            "asia/london": "Asia/London Overlap",
+            "london/asia": "Asia/London Overlap",
+            "lon/as": "Asia/London Overlap",
+            "as/lon": "Asia/London Overlap",
+            "asia/london overlap": "Asia/London Overlap",
+
+            "sydney/asia": "Sydney/Asia Overlap",
+            "asia/sydney": "Sydney/Asia Overlap",
+            "as/syd": "Sydney/Asia Overlap",
+            "syd/as": "Sydney/Asia Overlap",
+            "sydney/asia overlap": "Sydney/Asia Overlap",
+
+            "market maintenance": MAINTENANCE_SESSION_NAME,
+            "outside sessions": MAINTENANCE_SESSION_NAME,
+            "market maintenance / outside sessions": MAINTENANCE_SESSION_NAME
+      }
+
+      return session_aliases.get(
+            session_text,
+            session_text.title()
+      )
+
+def determine_session(entry_time):
+      if not entry_time:
+            return None
+
+      try:
+            parsed_time = datetime.strptime(entry_time.strip(), "%H:%M").time()
+      except (ValueError, TypeError, AttributeError):
+            return None
+
+      if dt_time(17, 0) <= parsed_time < dt_time(18, 0):
+            return MAINTENANCE_SESSION_NAME
+      elif dt_time(18, 0) <= parsed_time < dt_time(20, 0):
+            return "Sydney"
+      elif parsed_time >= dt_time(20, 0) or parsed_time < dt_time(3, 0):
+            return "Sydney/Asia Overlap"
+      elif dt_time(3, 0) <= parsed_time < dt_time(5, 0):
+            return "Asia/London Overlap"
+      elif dt_time(5, 0) <= parsed_time < dt_time(8, 0):
+            return "London"
+      elif dt_time(8, 0) <= parsed_time < dt_time(12, 0):
+            return "New York/London Overlap"
+      elif dt_time(12, 0) <= parsed_time < dt_time(17, 0):
+            return "New York"
+      else:
+            return None
+
+def calculate_session_analysis(trades):
+      session_analytics = {}
+
+      for trade in trades:
+            session_name = normalize_session_name(
+                  trade.get("session", "")
+            )
+
+            if session_name not in session_analytics:
+                  session_analytics[session_name] = {
+                        "total_trades": 0,
+                        "wins": 0,
+                        "losses": 0,
+                        "breakevens": 0,
+                        "net_pnl": 0,
+                        "total_realized_r": 0,
+                        "risk_trades": 0,
+                        "gross_net_profit": 0,
+                        "gross_net_loss": 0,
+                  }
+
+            session = session_analytics[session_name]
+
+            net_dollar_pnl = trade.get(
+                  "net_dollar_pnl",
+                  trade.get("dollar_pnl", 0)
+            )
+
+            net_result = trade.get(
+                  "net_result",
+                  calculate_net_result(net_dollar_pnl)
+            )
+
+            session["total_trades"] += 1
+            session["net_pnl"] += net_dollar_pnl
+
+            if net_result == "Win":
+                  session["wins"] += 1
+            elif net_result == "Loss":
+                  session["losses"] += 1
+            else:
+                  session["breakevens"] += 1
+
+            risk_amount = trade.get("risk_amount", 0)
+
+            if risk_amount > 0:
+                  gross_dollar_pnl = trade.get("dollar_pnl", 0)
+
+                  realized_r = trade.get(
+                        "realized_r",
+                        calculate_realized_r(
+                              gross_dollar_pnl,
+                              risk_amount
+                        )
+                  )
+
+                  session["total_realized_r"] += realized_r
+                  session["risk_trades"] += 1
+
+            if net_dollar_pnl > 0:
+                  session["gross_net_profit"] += net_dollar_pnl
+            elif net_dollar_pnl < 0:
+                  session["gross_net_loss"] += abs(net_dollar_pnl)
+
+      for session in session_analytics.values():
+            session["net_win_rate"] = (
+                  session["wins"]
+                  / session["total_trades"]
+                  * 100
+            )
+
+            if session["risk_trades"] > 0:
+                  session["average_realized_r"] = (
+                        session["total_realized_r"]
+                        / session["risk_trades"]
+                  )
+            else:
+                  session["average_realized_r"] = None
+
+            if session["gross_net_loss"] > 0:
+                  session["net_profit_factor"] = (
+                        session["gross_net_profit"]
+                        / session["gross_net_loss"]
+                  )
+            else:
+                  session["net_profit_factor"] = None
+
+      return session_analytics
+
+def format_currency(value):
+      if value < 0: 
+            return f"-${abs(value):,.2f}"
+      return f"${value:,.2f}"
+
+def display_session_analytics(trades): 
+      if len(trades) == 0:
+            print("No trades to calculate session analytics.")
+            return
+
+      session_analytics = calculate_session_analysis(trades)
+
+      print("\n" + "=" * 50)
+      print("SESSION ANALYTICS")
+      print("=" * 50)
+
+      remaining_session_names = sorted(
+            name for name in session_analytics if name not in SESSION_DISPLAY_ORDER
+      )
+      ordered_session_names = [
+            name for name in list(SESSION_DISPLAY_ORDER) + remaining_session_names
+            if name in session_analytics
+      ]
+
+      for session_name in ordered_session_names:
+            session = session_analytics[session_name]
+
+            heading = session_name.upper()
+            if not heading.endswith("OVERLAP") and "SESSION" not in heading:
+                  heading = f"{heading} SESSION"
+
+            print()
+            print("-" * 31)
+            print(heading)
+            print("-" * 31)
+            print()
+
+            print( 
+                  f"{'Total Trades: ':<27}"
+                  f"{session['total_trades']}"
+            )
+
+            print(
+                  f"{'Net P/L: ':<27}"
+                  f"{format_currency(session['net_pnl'])}"
+            )
+
+            print(
+                  f"{'Net Win Rate: ':<27}"
+                  f"{session['net_win_rate']:.2f}%"
+            )
+
+            if session["average_realized_r"] is None:
+                  print(f"{'Average Realized R: ':<27}N/A")
+            else:
+                  print(
+                        f"{'Average Realized R: ':<27}"
+                        f"{session['average_realized_r']:.2f}R"
+                  )
+            if session["net_profit_factor"] is None:
+                  print(
+                        f"{'Net Profit Factor: ':<27}"
+                        f"N/A (no losing trades)"
+                  )
+            else:
+                  print(
+                        f"{'Net Profit Factor: ':<27}"
+                        f"{session['net_profit_factor']:.2f}"
+                  )
+
+      comparable_sessions = {
+            name: data
+            for name, data in session_analytics.items()
+            if name != MAINTENANCE_SESSION_NAME
+      }
+
+      print("\n" + "=" * 50)
+      print("SESSION COMPARISON")
+      print("=" * 50)
+      print()
+
+      if comparable_sessions:
+            best_session = max(
+                  comparable_sessions,
+                  key = lambda name: comparable_sessions[name]["net_pnl"]
+            )
+
+            worst_session = min(
+                  comparable_sessions,
+                  key = lambda name: comparable_sessions[name]["net_pnl"]
+            )
+
+            print(
+                  f"{'Best Session':<27}"
+                  f"{best_session} "
+                  f"({format_currency(comparable_sessions[best_session]['net_pnl'])})"
+            )
+
+            print(
+                  f"{'Worst Session':<27}"
+                  f"{worst_session} "
+                  f"({format_currency(comparable_sessions[worst_session]['net_pnl'])})"
+            )
+      else:
+            print(f"{'Best Session':<27}N/A (no comparable sessions)")
+            print(f"{'Worst Session':<27}N/A (no comparable sessions)")
 
 def calculate_duration(entry_time, exit_time):
       entry_datetime = datetime.strptime(entry_time, "%H:%M")
@@ -535,7 +868,12 @@ while True:
                   continue
 
             setup = input("Enter setup: ").strip()
-            session = input("Enter session: ").strip()
+
+            session = determine_session(entry_time)
+            if session is None:
+                  session = "Unspecified"
+            print(f"Session automatically assigned: {session}")
+
             notes = input("Enter notes: ").strip()
             mistake = input("Enter mistake: ").strip()
 
@@ -557,10 +895,10 @@ while True:
             )
             
             realized_r = calculate_realized_r(
-                  net_dollar_pnl, 
+                  dollar_pnl,
                   risk_amount
             )
-      
+
             result = calculate_result(points_pnl)
             net_result = calculate_net_result(net_dollar_pnl)
 
@@ -837,8 +1175,12 @@ while True:
                   setup_input = input(f"Setup (current: {current.get('setup', 'N/A')}): ").strip()
                   new_setup = setup_input if setup_input != "" else current.get("setup", "")
 
-                  session_input = input(f"Session (current: {current.get('session', 'N/A')}): ").strip()
-                  new_session = session_input if session_input != "" else current.get("session", "")
+                  derived_session = determine_session(new_entry_time)
+                  if derived_session is not None:
+                        new_session = derived_session
+                  else:
+                        new_session = normalize_session_name(current.get("session", ""))
+                  print(f"Session automatically assigned: {new_session}")
 
                   notes_input = input(f"Notes (current: {current.get('notes', 'N/A')}): ").strip()
                   new_notes = notes_input if notes_input != "" else current.get("notes", "")
@@ -865,7 +1207,7 @@ while True:
                   )
 
                   new_realized_r = calculate_realized_r(
-                        new_net_dollar_pnl,
+                        new_dollar_pnl,
                         new_risk_amount
                   )
 
@@ -2058,14 +2400,18 @@ while True:
                         print(f"{'Longest Losing Streak:':<27}{longest_losing_display}")
 
       elif choice == "10":
+            display_session_analytics(trades)
+
+      elif choice == "11":
             save_trades(trades)
             print("Trades saved. (Trades are also saved automatically after every add, edit, and delete.)")
 
-      elif choice == "11":
+      elif choice == "12":
             export_trades_to_csv(trades)
 
-      elif choice == "12":
+      elif choice == "13":
             print("Goodbye.")
             break
       else:
             print("Invalid choice.")
+            
