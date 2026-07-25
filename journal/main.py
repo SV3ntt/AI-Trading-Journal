@@ -15,6 +15,28 @@ SESSION_DISPLAY_ORDER = (
       "New York",
       MAINTENANCE_SESSION_NAME,
 )
+
+WEEKLY_DISPLAY_ORDER = (
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+      "unspecified",
+)
+
+DURATION_DISPLAY_ORDER = (
+      "0-15 Minutes",
+      "16-30 Minutes",
+      "31-60 Minutes",
+      "61-120 Minutes",
+      "121-240 Minutes",
+      "241+ Minutes",
+      "unspecified",
+)
+
 def load_trades():
       try:
             with open(f"{data_dir}/trades.json", "r") as file:
@@ -98,13 +120,15 @@ def show_menu():
       print("7. Trading Statistics")
       print("8. Search / Filter Trades")
       print("9. Filtered Statistics")
+      print()
       print("10. Session Analytics")
       print("11. Setup Component Analytics")
+      print("12. Time Based Analytics")
       print()
-      print("12. Save Trades")
-      print("13. Export Trades to CSV")
+      print("13. Save Trades")
+      print("14. Export Trades to CSV")
       print()
-      print("14. Quit")
+      print("15. Quit")
 
 def export_trades_to_csv(trades): 
       if len(trades) == 0:
@@ -1194,6 +1218,248 @@ def calculate_duration(entry_time, exit_time):
       duration_minutes = int(duration.total_seconds() / 60)
 
       return duration_minutes
+
+def get_trade_weekday(trade):
+      trade_date_text = str(
+            trade.get("trade_date", "")
+       ).strip().replace(" ", "-")
+      
+      try: 
+            trade_date = datetime.strptime(
+                  trade_date_text,
+                  "%Y-%m-%d"
+            )
+      except (ValueError, TypeError):
+            return "Unspecified"
+      
+      return trade_date.strftime("%A")
+      
+def get_entry_hour_range(trade):
+      entry_time_text = str(
+            trade.get("entry_time", "")
+      ).strip()
+
+      try:
+            entry_time = datetime.strptime(
+                  entry_time_text,
+                  "%H:%M"
+            )
+      except (ValueError, TypeError):
+            return "Unspecified" 
+      
+      hour = entry_time.hour
+
+      return f"{hour:02d}:00 - {hour:02d}:59"
+
+def get_duration_range(trade): 
+      duration = trade.get("duration")
+
+      if isinstance(duration, bool):
+            return "Unspecified"
+      
+      try:
+            duration = float(duration)
+      except (ValueError, TypeError):
+            return "Unspecified"
+      
+      if duration < 0:
+            return "Unspecified"
+      elif duration <= 15:
+            return "0 - 15 minutes"
+      elif duration <= 30:
+            return "16 - 30 minutes"
+      elif duration <= 60:
+            return "31 - 60 minutes"
+      elif duration <= 120:
+            return "61 - 120 minutes"
+      elif duration <140:
+            return "121 - 140 minutes"
+      else:
+            return "141+ minutes"
+      
+def calculate_time_based_analytics(trades):
+      weekday_analytics = {}
+      entry_hour_analytics = {}
+      duration_analytics = {}
+
+      for trade in trades:
+            net_dollar_pnl, net_result, realized_r = (
+                  _get_trade_bucket_financials(trade)
+            )
+            time_categories = (
+                  (
+                        weekday_analytics,
+                        get_trade_weekday(trade)
+                  ), 
+                  (
+                        entry_hour_analytics,
+                        get_entry_hour_range(trade)
+                  ), 
+                  (
+                        duration_analytics,
+                        get_duration_range(trade)
+                  )
+            )
+
+            for analytics, category_name in time_categories:
+                  _record_trade_in_setup_bucket(
+                        analytics,
+                        category_name,
+                        net_dollar_pnl,
+                        net_result,
+                        realized_r
+                  )
+
+      _finalize_setup_buckets(weekday_analytics)
+      _finalize_setup_buckets(entry_hour_analytics)
+      _finalize_setup_buckets(duration_analytics)
+
+      
+      return (
+            weekday_analytics,
+            entry_hour_analytics,
+            duration_analytics                                                            
+      )
+
+def _display_time_buckets(buckets, display_order=None): 
+      if display_order is None:
+            ordered_names = sorted(
+                  buckets,
+                  key=str.lower
+            )
+      else:
+            remaining_names = sorted(
+                  name
+                  for name in buckets
+                  if name not in display_order
+            )
+
+            ordered_names = [
+                  name
+                  for name in list(display_order) + remaining_names
+                  if name in buckets
+            ]
+
+      for name in ordered_names:
+            _display_setup_buckets(
+                  {name: buckets[name]}
+            )
+
+def _display_time_comparison(label, buckets): 
+      comparable_buckets = {
+            name: data
+            for name, data in buckets.items()
+            if name != "Unspecified"
+      }
+
+      if not comparable_buckets:
+            print(
+                  f"{'Best ' + label:<27}"
+                  f"N/A"
+            )
+            return
+      best_name = max(
+            comparable_buckets,
+            key=lambda name: comparable_buckets[name]["net_pnl"]
+      )
+
+      worst_name = min(
+            comparable_buckets,
+            key=lambda name: comparable_buckets[name]["net_pnl"]
+      )
+
+      best = comparable_buckets[best_name]
+      worst = comparable_buckets[worst_name]
+
+      best_trade_word = (
+            "trade"
+            if best["total_trades"] == 1
+            else "trades"
+      )
+
+      worst_trade_word = (
+            "trade"
+            if worst["total_trades"] == 1
+            else "trades"
+      )
+
+      print(
+            f"{'Best ' + label:<27}"
+            f"{best_name} "
+            f"({format_currency(best['net_pnl'])}, "
+            f"{best['total_trades']} {best_trade_word})"
+      )
+
+      print( 
+            f"{'Worst ' + label:<27}"
+            f"{worst_name} "
+            f"({format_currency(worst['net_pnl'])}, "
+            f"{worst['total_trades']} {worst_trade_word})"
+      )
+
+def display_time_based_analytics(trades):
+      if len(trades) == 0:
+            print(
+                  "No trades to calculate " 
+                  "time-based analytics."
+            )
+            return
+      (
+            weekday_analytics,
+            entry_hour_analytics,
+            duration_analytics,
+      ) = calculate_time_based_analytics(trades)
+
+      print("\n" + "=" * 50)
+      print("DAY-OF-WEEK ANALYTICS")
+      print("=" * 50)
+
+      _display_time_buckets(
+            weekday_analytics,
+            WEEKLY_DISPLAY_ORDER
+      )
+
+      print("\n" + "=" * 50)
+      print("ENTRY-HOUR ANALYTICS")
+      print("=" * 50)
+
+      _display_time_buckets(
+            entry_hour_analytics,
+      )
+
+      print("\n" + "=" * 50)
+      print("TRADE-DURATION ANALYTICS")
+      print("=" * 50)
+
+      _display_time_buckets(
+            duration_analytics,
+            DURATION_DISPLAY_ORDER
+      )
+
+      print("\n" + "=" * 50)
+      print("TIME-BASED COMPARISONS")
+      print("=" * 50)
+      print()
+
+      _display_time_comparison(
+            "Weekday",
+            weekday_analytics
+      )
+
+      _display_time_comparison(
+            "Entry Hour",
+            entry_hour_analytics
+      )
+
+      _display_time_comparison(
+            "Trade Duration",
+            duration_analytics
+      )
+
+      print()
+      print(
+            "Note: comparisons are not ranked by net P/L. Always consider the trade count."
+      )
 
 def get_optional_date(prompt): 
       while True:
@@ -3097,13 +3363,16 @@ while True:
             display_strategy_method_analytics(trades)
 
       elif choice == "12":
+            display_time_based_analytics(trades)
+
+      elif choice == "13":
             save_trades(trades)
             print("Trades saved. (Trades are also saved automatically after every add, edit, and delete.)")
 
-      elif choice == "13":
+      elif choice == "14":
             export_trades_to_csv(trades)
 
-      elif choice == "14":
+      elif choice == "15":
             print("Goodbye.")
             break
       else:
