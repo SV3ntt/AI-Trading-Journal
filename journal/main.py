@@ -24,17 +24,17 @@ WEEKLY_DISPLAY_ORDER = (
       "Friday",
       "Saturday",
       "Sunday",
-      "unspecified",
+      "Unspecified",
 )
 
 DURATION_DISPLAY_ORDER = (
-      "0-15 Minutes",
-      "16-30 Minutes",
-      "31-60 Minutes",
-      "61-120 Minutes",
-      "121-240 Minutes",
-      "241+ Minutes",
-      "unspecified",
+      "0 - 15 minutes",
+      "16 - 30 minutes",
+      "31 - 60 minutes",
+      "61 - 120 minutes",
+      "121 - 240 minutes",
+      "241+ minutes",
+      "Unspecified",
 )
 
 def load_trades():
@@ -124,11 +124,14 @@ def show_menu():
       print("10. Session Analytics")
       print("11. Setup Component Analytics")
       print("12. Time Based Analytics")
+      print(
+            "13. Equity and Drawdown History"
+      )
       print()
-      print("13. Save Trades")
-      print("14. Export Trades to CSV")
+      print("14. Save Trades")
+      print("15. Export Trades to CSV")
       print()
-      print("15. Quit")
+      print("16. Quit")
 
 def export_trades_to_csv(trades): 
       if len(trades) == 0:
@@ -1207,6 +1210,383 @@ def display_strategy_method_analytics(trades):
             print(f"{'Best Strategy/Method':<27}N/A (no specified strategies)")
             print(f"{'Worst Strategy/Method':<27}N/A (no specified strategies)")
 
+def get_trade_datetime(trade): 
+      trade_date_text = str(
+            trade.get("trade_date", "")
+      ).strip().replace(" ", "-")
+
+      entry_time_text = str(
+            trade.get("entry_time", "")
+      ).strip()
+
+      try: 
+            return datetime.strptime(
+                  f"{trade_date_text} {entry_time_text}",
+                  "%Y-%m-%d %H:%M"
+            )
+      except (ValueError, TypeError):
+            return None
+      
+
+def calculate_equity_drawdown_history(
+      trades,
+      starting_balance
+):
+
+      numbered_trades = [
+            (
+                  trade_number, 
+                  trade,
+                  get_trade_datetime(trade)
+            )
+            for trade_number, trade in enumerate(trades, start=1)
+      ]
+
+      numbered_trades.sort(
+            key=lambda item: (
+                  item[2] is None, 
+                  item [2] or datetime.max,
+                  item[0]
+            )
+      )
+      
+      running_balance = float(starting_balance)
+      high_water_mark = float(starting_balance)
+      high_water_mark_source = "Starting Balance"
+
+      maximum_drawdown = 0.0
+      maximum_drawdown_percentage = 0.0
+      maximum_drawdown_peak = "Starting Balance"
+      maximum_drawdown_trough = "N/A"
+
+      history = []
+      unspecified_datetime_trades = 0
+
+      for (
+            trade_number, 
+            trade, 
+            trade_datetime
+      ) in numbered_trades:
+
+            if trade_datetime is None:
+                  unspecified_datetime_trades += 1
+                  
+            net_dollar_pnl = trade.get(
+                  "net_dollar_pnl",
+                  trade.get("dollar_pnl", 0)
+            )
+
+            try: 
+                  net_dollar_pnl = float(
+                        net_dollar_pnl
+                  )
+            except (ValueError, TypeError):
+                  net_dollar_pnl = 0.0
+
+            running_balance += net_dollar_pnl
+
+            if running_balance > high_water_mark:
+                  high_water_mark = running_balance
+                  high_water_mark_source = (
+                        f"Trade #{trade_number}"
+                  )
+
+            drawdown= (
+                  high_water_mark
+                  - running_balance
+            )
+
+            if high_water_mark > 0:
+                  drawdown_percentage = (
+                        drawdown
+                        / high_water_mark
+                        * 100
+                  )
+            else:
+                  drawdown_percentage = 0.0
+
+            history_row = {
+                  "trade_number": trade_number,
+
+                  "trade_date": (
+                        trade_datetime.strftime(
+                              "%Y-%m-%d"
+                        )
+                        if trade_datetime is not None
+                        else "Unspecified"
+                  ),
+
+                  "entry_time": (
+                        trade_datetime.strftime(
+                              "%H:%M"
+                        )
+                        if trade_datetime is not None
+                        else "N/A"
+                  ),
+
+                  "symbol": str(
+                        trade.get(
+                              "symbol",
+                              "N/A"
+                        )
+                  ).upper(),
+
+                  "net_dollar_pnl": (
+                        net_dollar_pnl
+                  ),
+
+                  "equity": (
+                        running_balance
+                  ),
+
+                  "high_water_mark": (
+                        high_water_mark
+                  ),
+
+                  "drawdown": drawdown,
+
+                  "drawdown_percentage": (
+                        drawdown_percentage
+                  ),
+            }
+
+            history.append(history_row)
+
+            if drawdown > maximum_drawdown:
+                  maximum_drawdown = drawdown
+
+                  maximum_drawdown_peak = (
+                        high_water_mark_source
+                  )
+
+                  maximum_drawdown_trough = (
+                        f"Trade {trade_number}"
+                  )
+
+            if (
+                  drawdown_percentage
+                  > maximum_drawdown_percentage
+            ):
+                  maximum_drawdown_percentage = (
+                        drawdown_percentage
+                  )
+
+      ending_balance = running_balance
+
+      net_change = (
+            ending_balance
+            - float(starting_balance)
+      )
+
+      if history:
+            current_drawdown = (
+                  history[-1]["drawdown"]
+            )
+
+            current_drawdown_percentage = (
+                  history[-1][
+                        "drawdown_percentage"
+                  ]
+            )
+      else:
+            current_drawdown = 0.0
+            current_drawdown_percentage = 0.0
+
+      return {
+            "history": history,
+
+            "starting_balance": (
+                  float(starting_balance)
+            ),
+
+            "ending_balance": ending_balance,
+
+            "net_change": net_change,
+
+            "high_water_mark": (
+                  high_water_mark
+            ),
+
+            "current_drawdown": (
+                  current_drawdown
+            ),
+
+            "current_drawdown_percentage": (
+                  current_drawdown_percentage
+            ),
+
+            "maximum_drawdown": (
+                  maximum_drawdown
+            ),
+
+            "maximum_drawdown_percentage": (
+                  maximum_drawdown_percentage
+            ),
+
+            "maximum_drawdown_peak": (
+                  maximum_drawdown_peak
+            ),
+
+            "maximum_drawdown_trough": (
+                  maximum_drawdown_trough
+            ),
+
+            "unspecified_datetime_trades": (
+                  unspecified_datetime_trades
+            ),
+
+      }
+
+def format_drawdown(value):
+      if value > 0:
+            return f"-${(value):,.2f}"
+
+      return "$0.00"
+
+def format_drawdown_percentage(value):
+      if value > 0:
+            return f"-{value:.2f}%"
+
+      return "0.00%"
+
+
+def display_equity_drawdown_history(
+      trades,
+      account
+): 
+      if account is None: 
+            print(
+                  "\nNo account has been created yet. "
+                  "Please create an account through "
+                  "Account Status first. "
+            )
+            return
+
+      equity_data = (
+            calculate_equity_drawdown_history(
+                  trades,
+                  account["starting_balance"]
+            )
+      )
+
+      table_width = 95
+
+      print("\n" + "=" * table_width)
+      print("EQUITY & DRAWDOWN HISTORY".center(table_width))
+      print("=" * table_width)
+      print()
+
+      print(
+            f"{'#':<4}"
+            f"{'Date':<12}"
+            f"{'Time':<7}"
+            f"{'Symbol':<9}"
+            f"{'Net P/L':>12}"
+            f"{'Equity':>14}"
+            f"{'HWM':>14}"
+            f"{'Drawdown':>14}"
+            f"{'DD %':>9}"
+      )
+
+      print("-" * table_width)
+
+      if not equity_data["history"]:
+            print("No trades to display. ")
+
+      else:  
+            for row in equity_data["history"]:
+                  print(
+                        f"{row['trade_number']:<4}"
+                        f"{row['trade_date']:<12}"
+                        f"{row['entry_time']:<7}"
+                        f"{row['symbol']:<9}"
+                        f"{format_currency(row['net_dollar_pnl']):>12}"
+                        f"{format_currency(row['equity']):>14}"
+                        f"{format_currency(row['high_water_mark']):>14}"
+                        f"{format_drawdown(row['drawdown']):>14}"
+                        f"{format_drawdown_percentage(row['drawdown_percentage']):>9}"
+                  )
+
+      print("\n" + "=" * 50)
+      print("EQUITY & DRAWDOWN SUMMARY".center(50))
+      print("=" * 50)
+      print()
+
+      print(
+            f"{'Starting Balance: ':<30}"
+            f"{format_currency(equity_data['starting_balance'])}"
+      )
+
+      print(
+            f"{'Ending Balance: ':<30}"
+            f"{format_currency(equity_data['ending_balance'])}"
+      )
+
+      print(
+            f"{'Net Change: ':<30}"
+            f"{format_currency(equity_data['net_change'])}"
+      )
+
+      print(
+            f"{'High Water Mark: ':<30}"
+            f"{format_currency(equity_data['high_water_mark'])}"
+      )
+
+      print(
+            f"{'Current Drawdown: ':<30}"
+            f"{format_drawdown(equity_data['current_drawdown'])}"
+      )
+
+      print(
+            f"{'Current Drawdown Percentage: ':<30}"
+            f"{format_drawdown_percentage(equity_data['current_drawdown_percentage'])}"
+      )
+
+      print(
+            f"{'Maximum Drawdown: ':<30}"
+            f"{format_drawdown(equity_data['maximum_drawdown'])}"
+      )
+
+      print(
+            f"{'Maximum Drawdown Percentage: ':<30}"
+            f"{format_drawdown_percentage(equity_data['maximum_drawdown_percentage'])}"
+      )
+
+      print(
+            f"{'Maximum Drawdown Peak: ':<30}"
+            f"{equity_data['maximum_drawdown_peak']}"
+      )
+
+      print(
+            f"{'Maximum Drawdown Trough: ':<30}"
+            f"{equity_data['maximum_drawdown_trough']}"
+      )
+
+      if (
+            equity_data[
+               "unspecified_datetime_trades"
+            ]
+            > 0
+      ):
+
+            print()
+
+            print(
+                  "Warning: "
+                  f"{equity_data['unspecified_datetime_trades']} "
+                  "trade(s) have unspecified or invalid "
+                  "date/time and were placed at the end "
+                  "in original order. "
+            )
+
+      print()
+
+      print(
+            "Note: drawdown is calculated from "
+            "closed-trade equity after commission,"
+            "not intratrade floating P/L."
+      )
+
 def calculate_duration(entry_time, exit_time):
       entry_datetime = datetime.strptime(entry_time, "%H:%M")
       exit_datetime = datetime.strptime(exit_time, "%H:%M")
@@ -1272,10 +1652,10 @@ def get_duration_range(trade):
             return "31 - 60 minutes"
       elif duration <= 120:
             return "61 - 120 minutes"
-      elif duration <140:
-            return "121 - 140 minutes"
+      elif duration <= 240:
+            return "121 - 240 minutes"
       else:
-            return "141+ minutes"
+            return "241+ minutes"
       
 def calculate_time_based_analytics(trades):
       weekday_analytics = {}
@@ -1458,7 +1838,7 @@ def display_time_based_analytics(trades):
 
       print()
       print(
-            "Note: comparisons are not ranked by net P/L. Always consider the trade count."
+            "Note: comparisons are ranked by net P/L. Always consider the trade count."
       )
 
 def get_optional_date(prompt): 
@@ -1559,42 +1939,32 @@ while True:
                   save_account(account)
                   print(f"Account '{account_name}' created successfully.")
 
-            total_net_dollar_pnl = sum(
-                  trade.get(
-                        "net_dollar_pnl",
-                        trade.get("dollar_pnl", 0)
-                  )
-                  for trade in trades
+            starting_balance = account.get("starting_balance", 0)
+
+            equity_data = calculate_equity_drawdown_history(
+                  trades,
+                  starting_balance
             )
 
-            starting_balance = account["starting_balance"]
-            current_balance = starting_balance + total_net_dollar_pnl
-            net_profit = total_net_dollar_pnl
-            growth_percentage = (net_profit / starting_balance) * 100 if starting_balance != 0 else 0
+            current_balance = equity_data["ending_balance"]
+            net_profit = equity_data["net_change"]
 
-            old_high_water_mark = account.get("high_water_mark", starting_balance)
+            growth_percentage = (
+                  net_profit
+                  / starting_balance
+                  * 100
+                  if starting_balance != 0
+                  else 0
+            )
 
-            running_balance = starting_balance
-            high_water_mark = starting_balance
+            high_water_mark = equity_data["high_water_mark"]
 
-            for trade in trades:
-                  running_balance += trade.get(
-                        "net_dollar_pnl",
-                        trade.get("dollar_pnl", 0)
-                  )
-                  if running_balance > high_water_mark:
-                        high_water_mark = running_balance
-
-            if high_water_mark != old_high_water_mark:
+            if account.get("high_water_mark") != high_water_mark:
                   account["high_water_mark"] = high_water_mark
                   save_account(account)
 
-            drawdown = high_water_mark - current_balance
-
-            if high_water_mark > 0:
-                  drawdown_percentage = (drawdown / high_water_mark) * 100
-            else:
-                  drawdown_percentage = 0
+            drawdown = equity_data["current_drawdown"]
+            drawdown_percentage = equity_data["current_drawdown_percentage"]
 
             print("\n=========================")
             print("ACCOUNT STATUS")
@@ -1614,14 +1984,19 @@ while True:
             else:
                   print("Net P/L: $0.00")
                   print("Growth: 0.00%")
-            
-            if drawdown > 0:
-                  print(f"Drawdown: -${drawdown:,.2f}")
-                  print(f"Drawdown Percentage: -{drawdown_percentage:.2f}%")
-            else:
-                  print("Drawdown: $0.00")
-                  print("Drawdown Percentage: 0.00%")
-                  
+
+            print(f"Drawdown: {format_drawdown(drawdown)}")
+            print(f"Drawdown Percentage: {format_drawdown_percentage(drawdown_percentage)}")
+
+            print(
+                  "Maximum Drawdown: "
+                  f"{format_drawdown(equity_data['maximum_drawdown'])}"
+            )
+
+            print(
+                  "Maximum Drawdown Percentage: "
+                  f"{format_drawdown_percentage(equity_data['maximum_drawdown_percentage'])}"
+            )
 
       elif choice == "2":
             if account is None:
@@ -1674,31 +2049,22 @@ while True:
                         continue
                   if new_starting_balance < 0:
                         print("Starting balance must be greater than or equal to $0.")
-                        continue
-
-            old_starting_balance = account["starting_balance"]
+                        continue              
 
             account["name"] = new_account_name
             account["type"] = new_account_type
             account["starting_balance"] = new_starting_balance
 
-            if new_starting_balance != old_starting_balance:
-                  total_net_dollar_pnl = sum(
-                        trade.get(
-                              "net_dollar_pnl",
-                              trade.get("dollar_pnl", 0)
-                        )
-                        for trade in trades
+            equity_data = (
+                  calculate_equity_drawdown_history(
+                        trades,
+                        new_starting_balance
                   )
+            )
 
-                  recalculated_balance = (
-                        new_starting_balance + total_net_dollar_pnl
-                  )
-
-                  account["high_water_mark"] = max(
-                        new_starting_balance, 
-                        recalculated_balance
-                  )
+            account["high_water_mark"] = (
+                  equity_data["high_water_mark"]
+            )
 
             save_account(account)
             print("Account updated successfully.")
@@ -3366,13 +3732,19 @@ while True:
             display_time_based_analytics(trades)
 
       elif choice == "13":
+            display_equity_drawdown_history(
+                  trades,
+                  account
+            )
+
+      elif choice == "14":
             save_trades(trades)
             print("Trades saved. (Trades are also saved automatically after every add, edit, and delete.)")
 
-      elif choice == "14":
+      elif choice == "15":
             export_trades_to_csv(trades)
 
-      elif choice == "15":
+      elif choice == "16":
             print("Goodbye.")
             break
       else:
