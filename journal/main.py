@@ -1,11 +1,40 @@
 import csv
 import json
+import math
+import os
 import shutil
 from datetime import datetime, timedelta, time as dt_time
 
 valid_directions = ("long", "short")
-data_dir = "data"
-MAINTENANCE_SESSION_NAME = "Market Maintenance / Outside Sessions"
+PROJECT_ROOT = os.path.dirname(
+      os.path.dirname(os.path.abspath(__file__))
+)
+
+data_dir = os.path.join(
+      PROJECT_ROOT,
+      "data"
+)
+
+TRADES_FILE = os.path.join(
+      data_dir,
+      "trades.json"
+)
+
+ACCOUNT_FILE = os.path.join(
+      data_dir,
+      "account.json"
+)
+
+VALID_ACCOUNT_TYPES = (
+      "Personal",
+      "Evaluation",
+      "Funded",
+)
+
+MAINTENANCE_SESSION_NAME = (
+      "Market Maintenance / Outside Sessions"
+)
+
 SESSION_DISPLAY_ORDER = (
       "Sydney",
       "Sydney/Asia Overlap",
@@ -37,74 +66,420 @@ DURATION_DISPLAY_ORDER = (
       "Unspecified",
 )
 
-def load_trades():
-      try:
-            with open(f"{data_dir}/trades.json", "r") as file:
-                  trades = json.load(file)
-                  migrated = False
-
-                  for trade in trades:
-                        if "pnl" in trade and "points_pnl" not in trade:
-                              trade["points_pnl"] = trade["pnl"]
-
-                        derived_session = determine_session(trade.get("entry_time"))
-
-                        if derived_session is not None:
-                              recalculated_session = derived_session
-                        else:
-                              recalculated_session = normalize_session_name(trade.get("session", ""))
-
-                        if trade.get("session") != recalculated_session:
-                              trade["session"] = recalculated_session
-                              migrated = True
-
-                        risk_amount = trade.get("risk_amount", 0)
-
-                        if "dollar_pnl" in trade and risk_amount > 0:
-                              recalculated_realized_r = calculate_realized_r(
-                                    trade["dollar_pnl"],
-                                    risk_amount
-                              )
-
-                              if trade.get("realized_r") != recalculated_realized_r:
-                                    trade["realized_r"] = recalculated_realized_r
-                                    migrated = True
-
-                  if migrated:
-                        backup_path = f"{data_dir}/trades_backup.json"
-                        try:
-                              shutil.copy2(f"{data_dir}/trades.json", backup_path)
-                              print(f"Existing trade data required updates (session and/or Realized R). A safety copy of the previous file was saved to {backup_path}.")
-                        except OSError as e:
-                              print(f"Warning: could not create a backup copy before updating trades.json: {e}")
-
-                        save_trades(trades)
-
-                  return trades
-      except FileNotFoundError:
-            return []
-      except json.JSONDecodeError:
-            print("Warning: trades.json is corrupted. Starting with an empty trade list.")
-            return []
-
-def save_trades(trades):
-      with open(f"{data_dir}/trades.json", "w") as file:
-            json.dump(trades, file, indent=4)
-
-def load_account(): 
-      try: 
-            with open("data/account.json", "r") as file: 
-                  account = json.load(file) 
-                  return account
-      except FileNotFoundError:
-            return None
-      except json.JSONDecodeError:
-            print("Warning: account.json is corrupted.")
+def create_timestamped_backup(
+            file_path, 
+            label
+): 
+      if not os.path.exists(file_path):
             return None
       
+      timestamp = datetime.now().strftime(
+            "%Y-%m-%d_%H-%M-%S"
+      )
+      
+      file_root, file_extension = (
+            os.path.splitext(file_path)
+      )
+      backup_path = (
+            f"{file_root}_backup_{label}_{timestamp}"
+            f"{file_extension}"
+      )
+
+      try:
+            shutil.copy2(
+                  file_path,
+                  backup_path
+            )
+
+            return backup_path
+      
+      except OSError as error:
+            print(
+                  "Warning: a safety copy could not "
+                  f"be created for {file_path}: "
+                  f"{error}"
+            )
+
+            return None
+      
+def save_json_atomic(
+            file_path,
+            data
+):
+      
+      directory = os.path.dirname(file_path)
+
+      temporary_path = (
+            f"{file_path}.tmp"
+      )
+
+      backup_path = (
+            f"{os.path.splitext(file_path)[0]}"
+            "_backup.json"
+      )
+
+      try:
+            if directory:
+                  os.makedirs(
+                        directory,
+                        exist_ok=True
+                  )
+
+            with open(
+                  temporary_path,
+                  "w",
+                  encoding="utf-8"
+            ) as file:
+                  json.dump(
+                        data,
+                        file,
+                        indent=4,
+                        allow_nan=False
+                  )
+
+                  file.flush()
+                  os.fsync(file.fileno())
+
+            if os.path.exists(file_path):
+                  try:
+                        with open(
+                              file_path,
+                              "r",
+                              encoding="utf-8"
+                        ) as existing_file:
+                              json.load(existing_file)
+
+                        shutil.copy2(
+                              file_path,
+                              backup_path
+                        )
+
+                  except(
+                        OSError,
+                        json.JSONDecodeError
+                  ):
+                        pass
+
+            os.replace(
+                  temporary_path,
+                  file_path
+            )
+
+            return True
+
+      except (
+            OSError,
+            TypeError, 
+            ValueError, 
+      ) as error:
+            print(
+                  f"Error saving {file_path}: "
+                  f"{error}"
+            )
+
+            try: 
+                  if os.path.exists(
+                        temporary_path
+                  ):
+                        os.remove(
+                              temporary_path
+                        )
+                  
+            except OSError: 
+                  pass
+            
+            return False
+
+def save_rejected_trades(
+            rejected_trades
+):
+      
+      timestamp = datetime.now().strftime(
+            "%Y-%m-%d_%H-%M-%S"
+      )
+
+      rejected_path = os.path.join(
+            data_dir,
+            f"rejected_trades_"
+            f"{timestamp}.json"
+      )
+
+      if save_json_atomic(
+            rejected_path,
+            rejected_trades
+      ):
+            return rejected_path
+
+      return None
+
+def load_trades(): 
+      try:
+            with open(
+                  TRADES_FILE, 
+                  "r", 
+                  encoding="utf-8"
+            ) as file:
+                  stored_data = json.load(file)
+
+      except FileNotFoundError:
+            return []
+      
+      except json.JSONDecodeError: 
+            backup_path = (
+                  create_timestamped_backup(
+                        TRADES_FILE,
+                        "corrupted"
+                  )
+            )
+
+            print(
+                  "Warning: trades.json contains "
+                  "invalid JSON. The journal started "
+                  "with no loaded trades."
+
+            )
+
+            if backup_path is not None: 
+                  print(
+                        "A safety copy was saved to "
+                        f"{backup_path}"
+                  )
+
+            return []
+      
+      except OSError as error:
+            print(
+                  f"Error reading trades.json: "
+                  f"{error}"
+            )
+
+            return []
+
+
+      if not isinstance(stored_data, list): 
+            backup_path = (
+                  create_timestamped_backup(
+                        TRADES_FILE,
+                        "invalid_structure"
+                  )
+            )
+
+            print(
+                  "Warning: trades.json does not contain"
+                  "a list of trades. The journal "
+                  "started with no loaded trades."
+            )
+
+            if backup_path is not None:
+                  print(
+                        "A safety copy was saved to "
+                        f"{backup_path}"
+                  )
+
+            return []
+      
+      valid_trades = []
+      rejected_trades = []
+      data_changed = False
+
+      for (
+            trade_number, 
+            stored_trade
+      ) in enumerate(
+            stored_data, 
+            start=1
+      ):
+            (
+                  normalized_trade,
+                  errors
+            )= validate_and_normalize_trade(
+                  stored_trade
+            )
+
+            if errors:
+                  rejected_trades.append({
+                        "trade_number": (
+                              trade_number
+                        ), 
+
+                        "errors": errors,
+
+                        "original_record": (
+                              stored_trade
+                        ), 
+
+                  })
+
+                  continue
+
+            valid_trades.append(
+                  normalized_trade
+            )
+
+            if normalized_trade != stored_trade:
+                  data_changed = True
+
+      if rejected_trades: 
+            data_changed = True
+
+            rejected_path = (
+                  save_rejected_trades(
+                        rejected_trades
+                  )
+            )
+
+            print(
+                  "Warning: "
+                  f"{len(rejected_trades)} invalid "
+                  "trade(s) were excluded from the "
+                  "active journal."
+            )
+
+            if rejected_path is not None:
+                  print(
+                        "The rejected records and their "
+                        "errors were saved to "
+                        f"{rejected_path}"
+                  )
+
+      if data_changed:
+            backup_path = (
+                  create_timestamped_backup(
+                        TRADES_FILE,
+                        "before_validation"
+                  )
+            )
+
+            if save_trades(valid_trades): 
+                  print(
+                        "Trade data was validated " 
+                        "and normalized."
+                  )
+
+                  if backup_path is not None: 
+                        print(
+                              "The original file was " 
+                              "backed up to "
+                              f"{backup_path}"
+                        )
+
+            else:
+                  print(
+                        "Warning: normalized trade" 
+                        "data could not be saved."
+                        "The validated data will only "
+                        "be available during this "
+                        "session."
+                  )
+
+      return valid_trades
+
+def save_trades(trades):
+      return save_json_atomic(
+            TRADES_FILE,
+            trades
+      )
+
+def load_account():
+      try: 
+            with open(
+                  ACCOUNT_FILE, 
+                  "r", 
+                  encoding="utf-8"
+            ) as file: 
+                  stored_account = json.load(file)
+
+      except FileNotFoundError:
+            return None
+      
+      except json.JSONDecodeError:
+            backup_path = (
+                  create_timestamped_backup(
+                        ACCOUNT_FILE,
+                        "corrupted"
+                  )
+            )
+
+            print(
+                  "Warning: account.json contains "
+                  "invalid JSON."
+            )
+
+            if backup_path is not None: 
+                  print(
+                        "A safety copy was saved to "
+                        f"{backup_path}"
+                  )
+
+            return None
+
+      except OSError as error:
+            print(
+                  f"Error reading account.json: "
+                  f"{error}"
+            )
+
+            return None
+
+      (
+            normalized_account,
+            errors
+      ) = validate_and_normalize_account(
+            stored_account
+      )
+
+      if errors: 
+            backup_path = (
+                  create_timestamped_backup(
+                        ACCOUNT_FILE,
+                        "invalid"
+                  )
+            )
+
+            print(
+                  "Warning: account.json contains "
+                  "invalid data."
+            )
+
+            for error in errors: 
+                  print(f"- {error}")
+
+            if backup_path is not None:
+                  print(
+                        "A safety copy was saved to "
+                        f"{backup_path}"
+                  )
+
+            return None
+
+      if normalized_account != stored_account:
+            backup_path = (
+                  create_timestamped_backup(
+                        ACCOUNT_FILE,
+                        "before_validation"
+                  )
+            )
+
+            if save_account(normalized_account): 
+                  print(
+                        "Account data was validated "
+                        "and normalized."
+                  )
+
+                  if backup_path is not None: 
+                        print(
+                              "The original file was "
+                              "backed up to "
+                              f"{backup_path}"
+                        )
+
+      return normalized_account
+
 def save_account(account):
-      with open("data/account.json", "w") as file: 
-            json.dump(account, file, indent=4)
+      return save_json_atomic(
+            ACCOUNT_FILE,
+            account
+      )
 
 def show_menu():
       print("\n========== AI TRADING JOURNAL ==========")
@@ -124,9 +499,7 @@ def show_menu():
       print("10. Session Analytics")
       print("11. Setup Component Analytics")
       print("12. Time Based Analytics")
-      print(
-            "13. Equity and Drawdown History"
-      )
+      print("13. Equity and Drawdown History")
       print()
       print("14. Save Trades")
       print("15. Export Trades to CSV")
@@ -138,7 +511,13 @@ def export_trades_to_csv(trades):
             print("No trades to export.")
             return
       
-      filename = f"data/trades_export_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
+      filename = os.path.join(
+            data_dir, 
+            (
+                  "trades_export_"
+                  f"{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
+            )
+      )
       
       headers = [
             "Trade Number",
@@ -1599,10 +1978,613 @@ def calculate_duration(entry_time, exit_time):
 
       return duration_minutes
 
+def get_finite_number(
+      value,
+      field_name,
+      minimum=None,
+      minimum_is_strict=False,
+):
+      if isinstance(value, bool):
+            raise ValueError(
+                  f"{field_name} must be a number. "
+            )
+
+      try:
+            number = float(value)
+      
+      except (TypeError, ValueError):
+            raise ValueError(
+                  f"{field_name} must be a number. "
+            )
+
+      if not math.isfinite(number):
+            raise ValueError(
+                  f"{field_name} must be a finite "
+                  "number. "
+            )
+
+      if minimum is not None:
+            if (
+                  minimum_is_strict
+                  and number <= minimum
+            ):
+                  raise ValueError(
+                        f"{field_name} must be "
+                        f"greater than {minimum}. "
+                  )
+
+            if (
+                  not minimum_is_strict
+                  and number < minimum 
+            ):
+
+                  raise ValueError(
+                        f"{field_name} must be "
+                        f"greater than or equal to "
+                        f"{minimum}. "
+                  )
+
+      return number
+
+def get_positive_integer(
+      value,
+      field_name
+):
+
+      if isinstance(value, bool):
+            raise ValueError(
+                  f"{field_name} must be a whole "
+                  "number greater than 0."
+            )
+
+      try:
+            number = float(value)
+
+      except (TypeError, ValueError):
+            raise ValueError(
+                  f"{field_name} must be a whole "
+                  "number greater than 0."
+            )
+
+      if (
+            not math.isfinite(number)
+            or not number.is_integer()
+            or number <= 0
+      ):
+            raise ValueError(
+                  f"{field_name} must be a whole "
+                  "number greater than 0."
+            )
+
+      return int(number)
+
+def normalize_date_value(value):
+      date_text = (
+            str(value)
+            .strip()
+            .replace (" ", "-")
+      )
+
+      parsed_date = datetime.strptime(
+            date_text, 
+            "%Y-%m-%d"
+      )
+
+      return parsed_date.strftime(
+            "%Y-%m-%d"
+      )
+
+def normalize_time_value(value):
+      time_text = str(value).strip()
+
+      parsed_time = datetime.strptime(
+            time_text,
+            "%H:%M"
+      )
+
+      return parsed_time.strftime(
+            "%H:%M"
+      )
+
+def validate_and_normalize_trade(trade):
+      if not isinstance(trade, dict):
+            return None, [
+                  "Trade record must be a "
+                  "JSON object."
+            ]
+      
+      errors = []
+
+      symbol = str(
+            trade.get("symbol", "")
+      ).strip().lower()
+      
+      if symbol == "":
+            errors.append(
+                  "Symbol cannot be blank."
+            )
+
+      direction = str(
+            trade.get("direction", "")
+      ).strip().lower()
+
+      if direction not in valid_directions: 
+            errors.append(
+                  "Direction must be long or short."
+            )
+
+      numeric_values = {}
+
+      numeric_rules = (
+            (
+                  "entry",
+                  "Entry price",
+                  0,
+                  True
+            ),
+            (
+                  "exit",
+                  "Exit price",
+                  0,
+                  True
+            ),
+            (
+                  "point_value",
+                  "Point value",
+                  0,
+                  True
+            ),
+            (
+                  "risk_amount",
+                  "Risk amount",
+                  0,
+                  True
+            ),
+            (
+                  "commission",
+                  "Commission",
+                  0,
+                  False
+            ),
+      )
+
+      for (
+            field_name,
+            display_name,
+            minimum,
+            minimum_is_strict
+      ) in numeric_rules:
+            try:
+                  numeric_values[field_name] = get_finite_number(
+                              trade.get(
+                                    field_name
+                              ),
+                              display_name,
+                              minimum,
+                              minimum_is_strict
+                        )
+            except ValueError as error:
+                  errors.append(str(error))
+            
+      try:
+            contracts = get_positive_integer(
+                  trade.get("contracts"),
+                  "Contracts"
+            )
+
+      except ValueError as error:
+            errors.append(str(error))
+            contracts = None
+
+      try: 
+            trade_date = normalize_date_value(
+                  trade.get(
+                        "trade_date",
+                        ""
+                  )
+            )
+
+      except (TypeError, ValueError):
+            errors.append(
+                  "Trade date must be in YYYY-MM-DD "
+                  "format."
+            )
+            trade_date = None
+      
+      try: 
+            entry_time = normalize_time_value(
+                  trade.get(
+                        "entry_time",
+                        ""
+                  )
+            )
+      
+      except (TypeError, ValueError):
+            errors.append(
+                  "Entry time must use 24-hour format "
+                  "HH:MM 24-hour format."
+            )
+            entry_time = None
+
+      try:
+            exit_time = normalize_time_value(
+                  trade.get(
+                        "exit_time",
+                        ""
+                  )
+            )
+      
+      except (TypeError, ValueError):
+            errors.append(
+                  "Exit time must use 24-hour format "
+                  "HH:MM."
+            )
+            exit_time = None
+      
+      if errors: 
+            return None, errors
+      
+      points_pnl = calculate_points_pnl(
+            direction,
+            numeric_values["entry"],
+            numeric_values["exit"],
+      )
+
+      dollar_pnl = calculate_dollar_pnl(
+            points_pnl,
+            numeric_values["point_value"],
+            contracts
+      )
+
+      net_dollar_pnl = calculate_net_dollar_pnl(
+            dollar_pnl,
+            numeric_values["commission"]
+      )
+
+      realized_r = calculate_realized_r(
+            dollar_pnl,
+            numeric_values["risk_amount"]
+      )
+
+      calculated_values = (
+            points_pnl,
+            dollar_pnl,
+            net_dollar_pnl,
+            realized_r
+      )
+
+      if not all(
+            math.isfinite(value)
+            for value in calculated_values
+      ):
+            return None, [
+                  "Calculated trade values are too "
+                  "large to store safely."
+            ]
+
+      strategy_methods = (
+            get_strategy_methods(trade)
+      )
+
+      if strategy_methods == ["Unspecified"]:
+            strategy_methods = []
+      
+      setup_components = (
+            get_setup_components(trade)
+      )
+
+      if setup_components == ["Unspecified"]:
+            setup_components = []
+
+      normalized_trade = dict(trade)
+
+      normalized_trade.update({
+            "symbol": symbol,
+            "direction": direction,
+
+            "entry": (
+                  numeric_values["entry"]
+            ), 
+
+            "exit": (
+                  numeric_values["exit"]
+            ), 
+
+            "contracts": contracts,
+
+            "point_value": (
+                  numeric_values["point_value"]
+            ),
+
+            "points_pnl": points_pnl,
+            "dollar_pnl": dollar_pnl,
+
+            "commission": (
+                  numeric_values["commission"]
+            ),
+
+            "net_dollar_pnl": (
+                  net_dollar_pnl
+            ),
+
+            "result": calculate_result(points_pnl),
+            "net_result": calculate_net_result(net_dollar_pnl),
+
+            "risk_amount": (
+                  numeric_values["risk_amount"]
+            ),
+
+            "realized_r": realized_r,
+            "trade_date": trade_date,
+            "entry_time": entry_time,
+            "exit_time": exit_time,
+
+            "duration": calculate_duration(
+                  entry_time,
+                  exit_time
+            ),
+
+            "strategy_methods": (
+                  strategy_methods
+            ), 
+
+            "setup_components": (
+                  setup_components
+            ), 
+
+            "session": (
+                  determine_session(entry_time)
+                  or "Unspecified"
+            ), 
+
+            "notes": str(
+                  trade.get("notes", "")
+                  if trade.get("notes") is not None
+                  else ""
+            ).strip(),
+
+            "mistake": str(
+                  trade.get("mistake", "")
+                  if trade.get("mistake") 
+                  is not None
+                  else ""
+            ).strip(), 
+      })
+
+      return normalized_trade, []
+
+def validate_and_normalize_account(
+      account
+): 
+      if not isinstance(account, dict):
+            return None, [
+                  "Account data must be a "
+                  "JSON object."
+            ]
+
+      errors = []
+
+      account_name = str(
+            account.get("name", "")
+      ).strip()
+
+      if account_name == "": 
+            errors.append(
+                  "Account name cannot be blank."
+            )
+
+      account_type_text = str(
+            account.get("type", "")
+      ).strip().lower()
+
+      account_type_lookup = {
+            value.lower(): value
+            for value in VALID_ACCOUNT_TYPES
+      }
+
+      account_type = (
+            account_type_lookup.get(
+                  account_type_text
+            )
+      )
+
+      if account_type is None:
+            errors.append(
+                  "Account type must be Personal, "
+                  "Evaluation, or Funded."
+            )
+
+      try:
+            starting_balance = (
+                  get_finite_number(
+                        account.get(
+                              "starting_balance"
+                        ),
+                        "Starting balance",
+                        0
+                  )
+            )
+
+      except ValueError as error:
+            errors.append(str(error))
+            starting_balance = None
+
+      if errors:
+            return None, errors
+
+      try:
+            high_water_mark = (
+                  get_finite_number(
+                        account.get(
+                              "high_water_mark",
+                              starting_balance
+                        ),
+                        "High water mark",
+                        starting_balance
+                  )
+            )
+
+      except ValueError:
+            high_water_mark = (
+                  starting_balance
+            )
+
+      normalized_account = dict(account)
+
+      normalized_account.update({
+            "name": account_name,
+            "type": account_type,
+
+            "starting_balance": (
+                  starting_balance
+            ),
+
+            "high_water_mark": (
+                  high_water_mark
+            )
+      })
+
+      return normalized_account, []
+
+def prompt_required_text(
+            prompt,
+            field_name
+): 
+      while True:
+            value = input(prompt).strip()
+
+            if value != "":
+                  return value
+
+            print(
+                  f"{field_name} cannot be blank. "
+            )
+
+def prompt_choice(
+      prompt, 
+      valid_choices, 
+      error_message, 
+      default=None
+):
+      while True: 
+            value = (
+                  input(prompt)
+                  .strip()
+                  .lower()
+            )
+
+            if (
+                  value == ""
+                  and default is not None
+            ): 
+                  return default
+            
+            if value in valid_choices:
+                  return value
+
+            print (error_message)
+
+def prompt_finite_number(
+      prompt,
+      field_name,
+      minimum = None, 
+      minimum_is_strict = False, 
+      default = None
+):
+
+      while True: 
+            value = input(prompt).strip()
+
+            if (
+                  value == ""
+                  and default is not None
+            ): 
+                  return default
+            try: 
+                  return get_finite_number(
+                        value,
+                        field_name,
+                        minimum,
+                        minimum_is_strict
+                  )
+            except ValueError as error:
+                  print(error)
+
+def prompt_positive_integer(
+            prompt, 
+            field_name,
+            default = None
+): 
+      
+      while True: 
+            value = input(prompt).strip()
+
+            if (
+                  value == ""
+                  and default is not None
+            ): 
+                  return default
+            try: 
+                  return get_positive_integer(
+                        value,
+                        field_name
+                  )
+            except ValueError as error:
+                  print(error)
+            
+def prompt_date(
+      prompt, 
+      default = None
+): 
+      while True: 
+            value = input(prompt).strip()
+
+            if (
+                  value == ""
+                  and default is not None
+            ): 
+                  return default
+
+            try: 
+                  return normalize_date_value(
+                        value
+                  )
+
+            except (TypeError, ValueError):
+                  print(
+                        "Invalid date. Please use "
+                        "YYYY-MM-DD format."
+                  )
+
+def prompt_time(
+      prompt,
+      default = None
+):
+
+      while True: 
+            value = input(prompt).strip()
+
+            if (
+                  value == ""
+                  and default is not None
+            ): 
+                  return default
+
+            try:
+                  return normalize_time_value(
+                        value
+                  )
+
+            except (TypeError, ValueError):
+                  print(
+                        "Invalid time. Please use "
+                        "24-hour HH:MM format."
+                  )
+
 def get_trade_weekday(trade):
       trade_date_text = str(
             trade.get("trade_date", "")
-       ).strip().replace(" ", "-")
+      ).strip().replace(" ", "-")
       
       try: 
             trade_date = datetime.strptime(
@@ -1613,7 +2595,7 @@ def get_trade_weekday(trade):
             return "Unspecified"
       
       return trade_date.strftime("%A")
-      
+
 def get_entry_hour_range(trade):
       entry_time_text = str(
             trade.get("entry_time", "")
@@ -1897,47 +2879,66 @@ while True:
             if account is None: 
                   print("\nNo account has been created yet. Please create an account first.")
             
-                  account_name = input("Enter account name: ").strip()
-
-                  if account_name == "":
-                        print("Account name cannot be blank.")
-                        continue
+                  account_name = (
+                        prompt_required_text(
+                              "Enter account name: ",
+                              "Account name"
+                        )
+                  )
+            
 
                   print("\nAccount Types")
                   print("1. Personal")
                   print("2. Evaluation")
                   print("3. Funded")
 
-                  account_type_choice = input ("Choose account type: ").strip()
+                  account_type_choice = (
+                        prompt_choice(
+                              "Choose account type (1-3): ",
+                              ["1", "2", "3"],
+                              "Invalid account type."
+                        )
+                  )
 
-                  if account_type_choice == "1":
-                        account_type = "Personal"
-                  elif account_type_choice == "2":
-                        account_type = "Evaluation"
-                  elif account_type_choice == "3":
-                        account_type = "Funded"
-                  else:
-                        print("Invalid account type")
-                        continue
+                  account_type = {
+                        "1": "Personal",
+                        "2": "Evaluation",
+                        "3": "Funded",
+                  }[account_type_choice]
 
-                  try:
-                        starting_balance = float(input("Enter starting balance: $").strip())     
-                  except ValueError:
-                        print("Invalid starting balance.")
-                        continue
+                  starting_balance = (
+                        prompt_finite_number(
+                              (
+                                    "Enter starting "
+                                    "balance: $"
+                              ), 
+                                    "Starting balance", 
+                                    minimum=0,
+                        )
+                  )
 
-                  if starting_balance < 0:
-                        print(f"Starting balance must be greater than or equal to $0.")
-                        continue
-
-                  account = {
+                  new_account = {
                         "name": account_name,
                         "type": account_type,
                         "starting_balance": starting_balance,
-                        "high_water_mark": starting_balance
+                        "high_water_mark": starting_balance,
                   }
-                  save_account(account)
-                  print(f"Account '{account_name}' created successfully.")
+
+                  if save_account(new_account):
+                        account = new_account
+
+                        print(
+                              f"Account '{account_name}' "
+                              "created successfully."
+                        )
+
+                  else:
+                        print(
+                              "Account was not created "
+                              "because it could not be "
+                              "saved."
+                        )
+                        continue
 
             starting_balance = account.get("starting_balance", 0)
 
@@ -1959,9 +2960,25 @@ while True:
 
             high_water_mark = equity_data["high_water_mark"]
 
-            if account.get("high_water_mark") != high_water_mark:
-                  account["high_water_mark"] = high_water_mark
-                  save_account(account)
+            if (
+                  account.get("high_water_mark") 
+                  != high_water_mark
+            ): 
+                  previous_high_water_mark = (
+                        account.get(
+                              "high_water_mark"
+                        )
+                  )
+                  
+                  account["high_water_mark"] = (
+                        high_water_mark
+                  )
+
+                  if not save_account(account):
+                        account[
+                              "high_water_mark"
+                        ] = previous_high_water_mark
+
 
             drawdown = equity_data["current_drawdown"]
             drawdown_percentage = equity_data["current_drawdown_percentage"]
@@ -2019,42 +3036,44 @@ while True:
             print("3. Funded")
             print("Press Enter to keep current account type.")
 
-            account_type_choice = input(
-                  "Choose new account type: "
-                  ).strip()
+            account_type_choice = (
+                  prompt_choice(
+                        "Chose new account type: ", 
+                        ("1", "2", "3"),
+                        "Invalid account type.",
+                        default=""
+                  )
+            )
+
             if account_type_choice == "":
-                  new_account_type = account["type"]
-            elif account_type_choice == "1":
-                  new_account_type = "Personal"
-            elif account_type_choice == "2":
-                  new_account_type = "Evaluation"
-            elif account_type_choice == "3":
-                  new_account_type = "Funded"
-            else:
-                  print("Invalid account type.")
-                  continue
-
-            new_starting_balance_input = input(
-                  f"Starting Balance (current: ${account['starting_balance']:,.2f}): $"
-            ).strip()
-            if new_starting_balance_input == "":
-                  new_starting_balance = account["starting_balance"]
+                  new_account_type = (
+                        account ["type"]
+                  )
             else: 
-                  try:
-                        new_starting_balance = float(
-                              new_starting_balance_input    
+                  new_account_type = {
+                        "1": "Personal",
+                        "2": "Evaluation",
+                        "3": "Funded"
+                  }[account_type_choice]
+
+            new_starting_balance = (
+                  prompt_finite_number(
+                        (
+                              "Starting Balance "
+                              f"(current: "
+                              f"${account['starting_balance']:,.2f}"
+                              "): $"
+                        ), 
+                        "Starting balance",
+                        minimum=0,
+                        default=(
+                              account[
+                                    "starting_balance"
+                              ]
                         )
-                  except ValueError:
-                        print("Invalid starting balance.")
-                        continue
-                  if new_starting_balance < 0:
-                        print("Starting balance must be greater than or equal to $0.")
-                        continue              
-
-            account["name"] = new_account_name
-            account["type"] = new_account_type
-            account["starting_balance"] = new_starting_balance
-
+                  )
+            )
+      
             equity_data = (
                   calculate_equity_drawdown_history(
                         trades,
@@ -2062,73 +3081,101 @@ while True:
                   )
             )
 
-            account["high_water_mark"] = (
-                  equity_data["high_water_mark"]
-            )
+            updated_account = {
+                  **account,
 
-            save_account(account)
-            print("Account updated successfully.")
+                  "name": new_account_name,
+                  "type": new_account_type,
+                  "starting_balance": new_starting_balance,
+
+                  "high_water_mark": (
+                        equity_data[
+                              "high_water_mark"
+                        ]
+                  ),
+            }
+
+            if save_account(updated_account):
+                  account = updated_account
+
+                  print(
+                        "Account updated successfully."
+                  )
+
+            else: 
+                  print(
+                        "Account changes were not "
+                        "applied because they could "
+                        "not be saved."
+                  )
 
       elif choice == "3":
-            symbol = input("Enter symbol: ").lower().strip()
+            symbol = prompt_required_text(
+                  "Enter symbol: ",
+                  "Symbol"
+            ).lower()
 
-            if symbol == "":
-                  print("Symbol cannot be blank.")
-                  continue
+            direction = prompt_choice(
+                  "Enter direction (long/short): ",
+                  valid_directions,
+                  "Direction must be long or short."
+            )
 
-            direction = input("Long or short: ").lower().strip()
+            entry = prompt_finite_number(
+                  "Enter entry price: $",
+                  "Entry price",
+                  minimum=0,
+                  minimum_is_strict=True
+            )
 
-            if direction not in valid_directions:
-                  print("Invalid direction")
-                  continue
-            try:
-                 entry = float(input("Entry price: "))
-                 exit_price = float(input("Exit price: "))
-                 contracts = int(input("Number of contracts: "))
-                 point_value = float(input("Point value: ")) 
-                 risk_amount = float(input("Risk amount: $"))
-                 commission = float(input("Total commission: $"))
-                 
-            except ValueError:
-                  print ("Invalid price, contracts, point value," 
-                  "risk amount, or commission."
-                  
-                  )
-                  continue
+            exit_price = prompt_finite_number(
+                  "Enter exit price: $",
+                  "Exit price",
+                  minimum=0,
+                  minimum_is_strict=True
+            )
 
-            if entry <= 0 or exit_price <= 0:
-                  print("Entry and exit prices must be greater than 0.")
-                  continue
-            if contracts <= 0:
-                  print("Contracts must be greater than 0.")
-                  continue
-            if point_value <= 0:
-                  print("Point value must be greater than 0.")
-                  continue
-            if risk_amount <= 0:
-                  print("Risk amount must be greater than $0.")
-                  continue
-            if commission < 0:
-                  print("Commission cannot be negative.")
-                  continue
+            contracts = prompt_positive_integer(
+                  "Enter number of contracts: ",
+                  "Contracts"
+            )
 
-            try:
-                  trade_date = input("Trade date (YYYY-MM-DD): ").strip().replace(" ", "-")
-                  
-                  parsed_date = datetime.strptime(trade_date, "%Y-%m-%d")
-                  trade_date = parsed_date.strftime("%Y-%m-%d")
+            point_value = prompt_finite_number(
+                  "Enter point value: $",
+                  "Point value",
+                  minimum=0,
+                  minimum_is_strict=True
+            )
 
-            except ValueError:
-                  print("Invalid date. Please use YYYY-MM-DD format.")
-                  continue
+            risk_amount = prompt_finite_number(
+                  "Enter risk amount: $",
+                  "Risk amount",
+                  minimum=0,
+                  minimum_is_strict=True
+            )
 
-            try:
-                  entry_time = input("Entry time (HH:MM): ").strip()
-                  exit_time = input("Exit time (HH:MM): ").strip()
-                  duration = calculate_duration(entry_time, exit_time)
-            except ValueError:
-                  print("Invalid time format. Please use HH:MM.")
-                  continue
+            commission = prompt_finite_number(
+                  "Enter total commission: $",
+                  "Commission",
+                  minimum=0,
+            )
+
+            trade_date = prompt_date(
+                  "Enter trade date (YYYY-MM-DD): "
+            )
+
+            entry_time = prompt_time(
+                  "Enter entry time (HH:MM) "
+            )
+
+            exit_time = prompt_time(
+                  "Enter exit time (HH:MM) "
+            )
+
+            duration = calculate_duration(
+                  entry_time,
+                  exit_time
+            )
 
             strategy_method_input = input("Enter Strategy / Method (separate multiple with commas or +): ").strip()
             strategy_methods = dedupe_case_insensitive(split_strategy_methods(strategy_method_input))
@@ -2168,6 +3215,22 @@ while True:
                   risk_amount
             )
 
+            if not all(
+                  math.isfinite(value)
+                  for value in (
+                        points_pnl,
+                        dollar_pnl,
+                        net_dollar_pnl,
+                        realized_r
+                  )
+            ):
+                  print(
+                        "Calculated trade values are too "
+                        "large to store safely."
+                  )
+
+                  continue
+
             result = calculate_result(points_pnl)
             net_result = calculate_net_result(net_dollar_pnl)
 
@@ -2203,9 +3266,17 @@ while True:
                   "mistake": mistake
             }
             trades.append(trade)
-            save_trades(trades)
+           
+            if save_trades(trades): 
+                  print("Trade added successfully.")
 
-            print("Trade added.")
+            else: 
+                  trades.pop()
+
+                  print(
+                        "Trade was not added because it "
+                        "could not be saved."
+                  )
 
       elif choice == "4":
             if len(trades) == 0:
@@ -2323,122 +3394,160 @@ while True:
                         else current["symbol"]
                   )
 
-                  direction_input = input(
-                        f"Direction (current: {current['direction']}): "
-                        ).lower().strip()
-                  if direction_input == "":
-                        new_direction = current["direction"]
-                  elif direction_input not in valid_directions:
-                        print("Invalid direction.")
-                        continue
-                  else:
-                        new_direction = direction_input
+                  new_direction = prompt_choice(
+                        (
+                              "Direction "
+                              f"(current: "
+                              f"{current['direction']}): "
+                        ), 
+                        valid_directions,
+                        (
+                              "Direction must be "
+                              "long or short."
+                        ), 
+                        default=(
+                              current["direction"]
+                        )
+                  )
 
                   try:
-                        entry_input = input(
-                              f"Entry price (current: {current['entry']}): "
-                              ).strip()
                         new_entry = (
-                              float(entry_input) 
-                              if entry_input != "" 
-                              else current["entry"]
+                              prompt_finite_number(
+                                    (
+                                          "Entry price "
+                                          f"(current: "
+                                          f"${current['entry']}): "
+                                    ),
+                                    "Entry price",
+                                    minimum=0,
+                                    minimum_is_strict=True,
+                                    default=current["entry"]
+                              )
                         )
 
-                        exit_input = input(
-                              f"Exit price (current: {current['exit']}): "
-                              ).strip()
                         new_exit = (
-                              float(exit_input) 
-                              if exit_input != "" 
-                              else current["exit"]
+                              prompt_finite_number(
+                                    (
+                                          "Exit price "
+                                          f"(current: "
+                                          f"${current['exit']}): "
+                                    ),
+                                    "Exit price",
+                                    minimum=0,
+                                    minimum_is_strict=True,
+                                    default=current["exit"]
+                              )
                         )
 
-                        contracts_input = input(
-                              f"Contracts (current: {current.get('contracts', 'N/A')}): "
-                              ).strip()
                         new_contracts = (
-                              int(contracts_input) if contracts_input != "" 
-                              else current.get("contracts", 1)
+                              prompt_positive_integer(
+                                    (
+                                          "Contracts "
+                                          f"(current: "
+                                          f"{current.get('contracts')}): "
+                                    ),
+                                    "Contracts",
+                                    default=(
+                                          current[
+                                                "contracts"
+                                          ]
+                                    )
+                              )
+                        )
+                  
+                        new_point_value = (
+                              prompt_finite_number(
+                                    (
+                                          "Point value "
+                                          f"(current: "
+                                          f"${current['point_value']}): "
+                                    ),
+                                    "Point value",
+                                    minimum=0,
+                                    minimum_is_strict=True,
+                                    default=(
+                                          current[
+                                                "point_value"
+                                          ]
+                                    )
+                              )
                         )
 
-                        point_value_input = input(
-                              f"Point value (current: {current.get('point_value', 'N/A')}): "
-                              
-                              ).strip()
-                        new_point_value = ( 
-                              float(point_value_input) 
-                              if point_value_input != "" 
-                              else current.get("point_value", 1.0)
-                        )
-
-                        risk_amount_input = input(
-                              f"Risk amount "
-                              f"(current: ${current.get('risk_amount', 0):,.2f}): $"
-                        ).strip()
-                        
                         new_risk_amount = (
-                              float(risk_amount_input) 
-                              if risk_amount_input != "" 
-                              else current.get("risk_amount", 0)
+                              prompt_finite_number(
+                                    (
+                                          "Risk amount "
+                                          f"(current: "
+                                          f"${current.get('risk_amount', 0):,.2f}"
+                                          "): $"
+                                    ),
+                                    "Risk amount",
+                                    minimum=0,
+                                    minimum_is_strict=True,
+                                    default=(
+                                          current[
+                                          "risk_amount"
+                                          ]
+                                    )
+                              )
                         )
-
-                        commission_input = input(
-                              f"Total commission "
-                              f"(current: ${current.get('commission', 0):,.2f}): $"
-                        ).strip()
-
+                  
                         new_commission = (
-                              float(commission_input) 
-                              if commission_input != "" 
-                              else current.get("commission", 0)
+                              prompt_finite_number(
+                                    (
+                                          "Total commission "
+                                          f"(current: "
+                                          f"${current.get('commission', 0):,.2f}"
+                                          "): $"
+                                    ),
+                                    "Commission",
+                                    minimum=0,
+                                    default=(
+                                          current[
+                                                "commission"
+                                          ]
+                                    )
+                              )
+                        )
+                        
+                        new_trade_date = prompt_date(
+                              (
+                                    "Trade date "
+                                    f"(current: "
+                                    f"{current.get('trade_date')}): "
+                              ), 
+                              default=(
+                                    current["trade_date"]
+                              )
                         )
 
-                  except ValueError:
-                        print("Invalid price, contracts, point value, "
-                        " risk amount, or commission."
+                        new_entry_time = prompt_time(
+                              (
+                                    "Entry time "
+                                    f"(current: "
+                                    f"{current.get('entry_time')}): "
+                              ),
+                              default=(
+                                    current["entry_time"]
+                              )
                         )
-                        continue
 
-                  if new_entry <= 0 or new_exit <= 0:
-                        print("Entry and exit prices must be greater than 0.")
-                        continue
-                  if new_contracts <= 0:
-                        print("Contracts must be greater than 0.")
-                        continue
-                  if new_point_value <= 0:
-                        print("Point value must be greater than 0.")
-                        continue
-                  if new_risk_amount <= 0:
-                        print("Risk amount must be greater than $0.")
-                        continue
-                  if new_commission < 0:
-                        print("Commission cannot be negative.")
-                        continue
+                        new_exit_time = prompt_time(
+                              (
+                                    "Exit time "
+                                    f"(current: "
+                                    f"{current.get('exit_time')}): "
+                              ),
+                              default=(
+                                    current["exit_time"]
+                              )
+                        )
 
-
-                  try:
-                        date_input = input(f"Trade date (current: {current.get('trade_date', 'N/A')}): ").strip().replace(" ", "-")
-                        if date_input == "" or date_input == "-":
-                              new_trade_date = current.get("trade_date", "")
-                        else:
-                              parsed_date = datetime.strptime(date_input, "%Y-%m-%d")
-                              new_trade_date = parsed_date.strftime("%Y-%m-%d")
-                  except ValueError:
-                        print("Invalid date. Please use YYYY-MM-DD format.")
-                        continue
-
-                  try:
-                        entry_time_input = input(f"Entry time (current: {current.get('entry_time', 'N/A')}): ").strip()
-                        new_entry_time = entry_time_input if entry_time_input != "" else current.get("entry_time", "")
-
-                        exit_time_input = input(f"Exit time (current: {current.get('exit_time', 'N/A')}): ").strip()
-                        new_exit_time = exit_time_input if exit_time_input != "" else current.get("exit_time", "")
-
-                        if new_entry_time and new_exit_time:
-                              new_duration = calculate_duration(new_entry_time, new_exit_time)
-                        else:
-                              new_duration = current.get("duration", None)
-
+                        new_duration = calculate_duration(
+                              new_entry_time,
+                              new_exit_time
+                        )
+      
                   except ValueError:
                         print("Invalid time format. Please use HH:MM.")
                         continue
@@ -2513,12 +3622,29 @@ while True:
                         new_risk_amount
                   )
 
+                  if not all(
+                        math.isfinite(value)
+                        for value in [
+                              new_points_pnl,
+                              new_dollar_pnl,
+                              new_net_dollar_pnl,
+                              new_realized_r
+                        ]
+                  ):
+                        print(
+                              "Calculated trade values "
+                              "are too large to store "
+                              "safely."
+                        )
+
+                        continue
+
                   new_result = calculate_result(new_points_pnl)
                   new_net_result = calculate_net_result(
                         new_net_dollar_pnl
                   )
 
-                  trades[edit_index] = {
+                  updated_trade = {
                         "symbol": new_symbol,
                         "direction": new_direction,
 
@@ -2550,11 +3676,27 @@ while True:
                         "mistake": new_mistake
                   }
 
-                  save_trades(trades)
+                  previous_trade = current
 
-                  print ("Trade updated successfully.")
-            else:
-                  print("Invalid trade number.")
+                  trades[edit_index] = updated_trade
+
+                  if save_trades(trades):
+                        print(
+                              "Trade updated "
+                              "successfully."
+                        )
+
+                  else:
+                        trades[edit_index] = (
+                              previous_trade
+                        )
+
+                        print(
+                              "Trade changes were not "
+                              "applied because they "
+                              "could not be saved."
+                        )
+
 
       elif choice == "6":
             if len(trades) == 0:
@@ -2593,9 +3735,31 @@ while True:
                               f"(yes/no): "
                         ).lower().strip()
                         if confirm == "yes":
-                              removed_trade = trades.pop(delete_index)
-                              save_trades(trades)
-                              print(f"Deleted trade: {removed_trade['symbol']}")
+                              removed_trade = (
+                                    trades.pop(
+                                          delete_index
+                                    )
+                              )
+
+                              if save_trades(trades):
+                                    print(
+                                          "Deleted trade " 
+                                          f"{removed_trade['symbol']}"
+                                    )
+                              
+                              else: 
+                                    trades.insert(
+                                          delete_index, 
+                                          removed_trade
+                                    )
+
+                                    print(
+                                          "Trade was not "
+                                          "deleted because "
+                                          "the change could"
+                                          " not be saved."
+                                    )
+                  
                         else:
                               print("Delete cancelled.")
                   else:
@@ -3738,8 +4902,18 @@ while True:
             )
 
       elif choice == "14":
-            save_trades(trades)
-            print("Trades saved. (Trades are also saved automatically after every add, edit, and delete.)")
+            if save_trades(trades): 
+                  print(
+                        "Trades saved. "
+                        "(Trades are also saved "
+                        "automatically after every "
+                        "add, edit, and delete.)"
+                  )
+
+            else: 
+                  print(
+                        "Trades could not be saved. "
+                  )
 
       elif choice == "15":
             export_trades_to_csv(trades)
