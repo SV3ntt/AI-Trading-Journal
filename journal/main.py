@@ -66,6 +66,96 @@ DURATION_DISPLAY_ORDER = (
       "Unspecified",
 )
 
+VALID_MARKET_TYPES = (
+      "futures",
+      "forex",
+)
+
+FUTURES_ONLY_FIELDS = (
+      "contracts",
+      "tick_size",
+      "tick_value",
+      "point_value",
+      "points_pnl",
+      "ticks_pnl",
+)
+
+FOREX_ONLY_FIELDS = (
+      "lot_size",
+      "pip_size",
+      "pip_value",
+      "price_precision",
+      "pips_pnl",
+      "standard_lot_units",
+      "account_currency",
+      "conversion_rate",
+      "conversion_pair",
+      "conversion_timestamp",
+      "conversion_rate_source",
+)
+
+FUTURES_INSTRUMENT_PROFILES = {
+      "MES": {
+            "name": "Micro E-mini S&P 500",
+            "tick_size": 0.25,
+            "tick_value": 1.25,
+            "point_value": 5.00,
+      },
+      "MNQ": {
+            "name": "Micro E-mini Nasdaq-100",
+            "tick_size": 0.25,
+            "tick_value": 0.50,
+            "point_value": 2.00,
+      },
+      "MGC": {
+            "name": "Micro Gold",
+            "tick_size": 0.10,
+            "tick_value": 1.00,
+            "point_value": 10.00,
+      },
+      "SIL": {
+            "name": "Micro Silver",
+            "tick_size": 0.005,
+            "tick_value": 5.00,
+            "point_value": 1000.00,
+      },
+      "MCL": {
+            "name": "Micro WTI Crude Oil",
+            "tick_size": 0.01,
+            "tick_value": 1.00,
+            "point_value": 100.00,
+      },
+}
+
+for _profile_root, _profile in FUTURES_INSTRUMENT_PROFILES.items():
+      assert (
+            abs(
+                  _profile["point_value"]
+                  - _profile["tick_value"] / _profile["tick_size"]
+            )
+            < 1e-9
+      ), (
+            f"{_profile_root} profile is inconsistent: "
+            "point_value must equal tick_value / tick_size."
+      )
+
+FUTURES_MONTH_CODES = set("FGHJKMNQUVXZ")
+
+STANDARD_FOREX_CURRENCIES = {
+      "USD",
+      "EUR",
+      "GBP",
+      "JPY",
+      "CHF",
+      "CAD",
+      "AUD",
+      "NZD",
+}
+
+FLOATING_POINT_TOLERANCE = 1e-6
+
+STANDARD_LOT_UNITS = 100000
+
 def create_timestamped_backup(
             file_path, 
             label
@@ -536,14 +626,23 @@ def export_trades_to_csv(trades):
             "Result",
             "Net Result",
             "Trade Date",
-            "Entry Time", 
+            "Entry Time",
             "Exit Time",
             "Duration (minutes)",
             "Strategy / Method",
             "Setup Components",
             "Session",
             "Notes",
-            "Mistake"
+            "Mistake",
+            "Market Type",
+            "Tick Size",
+            "Tick Value",
+            "Ticks P/L",
+            "Lot Size",
+            "Pip Size",
+            "Pip Value",
+            "Pips P/L",
+            "Price Precision"
       ]
 
       try:
@@ -553,16 +652,59 @@ def export_trades_to_csv(trades):
                   writer.writerow(headers)
 
                   for i, trade in enumerate(trades):
+                        market_type = trade.get(
+                              "market_type",
+                              "futures"
+                        )
+                        price_precision = trade.get(
+                              "price_precision"
+                        )
+
+                        if (
+                              market_type == "forex"
+                              and price_precision is not None
+                        ):
+                              entry_display = (
+                                    f"{trade.get('entry', 0):.{price_precision}f}"
+                              )
+                              exit_display = (
+                                    f"{trade.get('exit', 0):.{price_precision}f}"
+                              )
+                        else:
+                              entry_display = round(
+                                    trade.get("entry", 0), 4
+                              )
+                              exit_display = round(
+                                    trade.get("exit", 0), 4
+                              )
+
+                        point_value = trade.get("point_value")
+                        tick_size = trade.get("tick_size")
+                        tick_value = trade.get("tick_value")
+                        ticks_pnl = trade.get("ticks_pnl")
+                        lot_size = trade.get("lot_size")
+                        pip_size = trade.get("pip_size")
+                        pip_value = trade.get("pip_value")
+                        pips_pnl = trade.get("pips_pnl")
+
                         writer.writerow([
                               i + 1,
                               trade.get("symbol", "").upper(),
                               trade.get("direction", ""),
-                              round(trade.get("entry", 0), 4),
-                              round(trade.get("exit", 0), 4),
+                              entry_display,
+                              exit_display,
                               trade.get("contracts", ""),
-                              round(trade.get("point_value", 0), 2),
+                              (
+                                    round(point_value, 2)
+                                    if point_value is not None
+                                    else ""
+                              ),
                               trade.get("risk_amount", ""),
-                              round(trade.get("points_pnl", 0), 2),
+                              (
+                                    round(trade.get("points_pnl", 0), 2)
+                                    if market_type == "futures"
+                                    else ""
+                              ),
                               round(trade.get("dollar_pnl", 0), 2),
                               round(trade.get("commission", 0), 2),
                               round(
@@ -586,9 +728,50 @@ def export_trades_to_csv(trades):
                               " + ".join(get_setup_components(trade)),
                               trade.get("session", ""),
                               trade.get("notes", ""),
-                              trade.get("mistake", "")
+                              trade.get("mistake", ""),
+                              market_type,
+                              (
+                                    tick_size
+                                    if tick_size is not None
+                                    else ""
+                              ),
+                              (
+                                    round(tick_value, 4)
+                                    if tick_value is not None
+                                    else ""
+                              ),
+                              (
+                                    round(ticks_pnl, 2)
+                                    if ticks_pnl is not None
+                                    else ""
+                              ),
+                              (
+                                    lot_size
+                                    if lot_size is not None
+                                    else ""
+                              ),
+                              (
+                                    pip_size
+                                    if pip_size is not None
+                                    else ""
+                              ),
+                              (
+                                    round(pip_value, 4)
+                                    if pip_value is not None
+                                    else ""
+                              ),
+                              (
+                                    round(pips_pnl, 2)
+                                    if pips_pnl is not None
+                                    else ""
+                              ),
+                              (
+                                    price_precision
+                                    if price_precision is not None
+                                    else ""
+                              )
                         ])
-                  
+
                   print(f"Trades exported to {filename} successfully.")
             
       except OSError as e:
@@ -627,6 +810,818 @@ def calculate_net_result(net_dollar_pnl):
             return "Loss"
       else:
             return "Break-even"
+
+def is_multiple_of(value, unit, tolerance=FLOATING_POINT_TOLERANCE):
+      if unit <= 0:
+            return False
+
+      ratio = value / unit
+
+      return abs(ratio - round(ratio)) < tolerance
+
+def clean_float_noise(value, tolerance=FLOATING_POINT_TOLERANCE):
+      nearest_int = round(value)
+
+      if abs(value - nearest_int) < tolerance:
+            return float(nearest_int) + 0.0
+
+      for decimals in range(1, 9):
+            rounded = round(value, decimals)
+
+            if abs(value - rounded) < tolerance:
+                  return rounded + 0.0
+
+      return value
+
+def calculate_ticks_pnl(points_pnl, tick_size):
+      return clean_float_noise(points_pnl / tick_size)
+
+def calculate_pips_pnl(points_pnl, pip_size):
+      return clean_float_noise(points_pnl / pip_size)
+
+def match_known_futures_root(symbol):
+      normalized_symbol = str(symbol).strip().upper()
+
+      for root in FUTURES_INSTRUMENT_PROFILES:
+            if normalized_symbol == root:
+                  return root
+
+            if not normalized_symbol.startswith(root):
+                  continue
+
+            suffix = normalized_symbol[len(root):]
+
+            if suffix in ("1!", "!"):
+                  return root
+
+            if (
+                  len(suffix) >= 2
+                  and suffix[0] in FUTURES_MONTH_CODES
+                  and suffix[1:].isdigit()
+                  and len(suffix[1:]) <= 2
+            ):
+                  return root
+
+      return None
+
+def get_known_futures_profile(symbol):
+      root = match_known_futures_root(symbol)
+
+      if root is None:
+            return None
+
+      return dict(
+            FUTURES_INSTRUMENT_PROFILES[root],
+            root=root
+      )
+
+def get_known_futures_tick_size(symbol):
+      profile = get_known_futures_profile(symbol)
+
+      if profile is None:
+            return None
+
+      return profile["tick_size"]
+
+def get_known_futures_tick_value(symbol):
+      profile = get_known_futures_profile(symbol)
+
+      if profile is None:
+            return None
+
+      return profile["tick_value"]
+
+def print_futures_instrument_profile(profile):
+      print(
+            f"{profile['root']} - {profile['name']}"
+      )
+      print(
+            f"Tick size: {profile['tick_size']} | "
+            f"Tick value: ${profile['tick_value']:,.2f} | "
+            f"Point value: ${profile['point_value']:,.2f}"
+      )
+
+def normalize_forex_symbol(symbol):
+      text = str(symbol).strip().upper()
+      text = text.replace("-", "/").replace(" ", "")
+
+      if "/" in text:
+            base, _, quote = text.partition("/")
+      elif len(text) == 6:
+            base, quote = text[:3], text[3:]
+      else:
+            return str(symbol).strip().lower()
+
+      if len(base) == 3 and len(quote) == 3:
+            return f"{base.lower()}/{quote.lower()}"
+
+      return str(symbol).strip().lower()
+
+def get_forex_pair_currencies(symbol):
+      normalized_symbol = normalize_forex_symbol(symbol)
+
+      if "/" not in normalized_symbol:
+            return None
+
+      base, _, quote = normalized_symbol.partition("/")
+
+      if len(base) != 3 or len(quote) != 3:
+            return None
+
+      return base.upper(), quote.upper()
+
+def get_standard_forex_pip_profile(symbol):
+      currencies = get_forex_pair_currencies(symbol)
+
+      if currencies is None:
+            return None
+
+      base, quote = currencies
+
+      if (
+            base not in STANDARD_FOREX_CURRENCIES
+            or quote not in STANDARD_FOREX_CURRENCIES
+      ):
+            return None
+
+      if quote == "JPY":
+            return {
+                  "pip_size": 0.01,
+                  "price_precision": 3,
+            }
+
+      return {
+            "pip_size": 0.0001,
+            "price_precision": 5,
+      }
+
+def calculate_forex_pip_value(pip_size, conversion_rate):
+      return pip_size * STANDARD_LOT_UNITS * conversion_rate
+
+def _fx_provider_lookup(from_currency, to_currency, timestamp):
+      # No market-data provider is currently configured. Once one is
+      # connected, this should return (pair_label, rate, source_label),
+      # where pair_label is "BASE/QUOTE" for the rate as quoted by the
+      # provider (get_fx_conversion_rate below handles inverting it if
+      # the provider only quotes the opposite direction), source_label
+      # is "historical_market_data" for a past timestamp or
+      # "latest_market_data" for a current one, or None if unavailable.
+      return None
+
+def get_fx_conversion_rate(
+      from_currency,
+      to_currency,
+      timestamp
+):
+      if from_currency == to_currency:
+            return 1.0, "not_required"
+
+      quote = _fx_provider_lookup(
+            from_currency,
+            to_currency,
+            timestamp
+      )
+
+      if quote is None:
+            return None, None
+
+      pair_label, rate, source_label = quote
+      quote_base, _, quote_quote = pair_label.partition("/")
+
+      if (
+            quote_base == from_currency
+            and quote_quote == to_currency
+      ):
+            return rate, source_label
+
+      if (
+            quote_base == to_currency
+            and quote_quote == from_currency
+            and rate not in (None, 0)
+      ):
+            return 1.0 / rate, source_label
+
+      return None, None
+
+def resolve_forex_pair_profile(symbol):
+      standard_profile = get_standard_forex_pip_profile(symbol)
+
+      if standard_profile is not None:
+            return (
+                  standard_profile["pip_size"],
+                  standard_profile["price_precision"],
+                  True
+            )
+
+      price_precision = prompt_positive_integer(
+            "Enter price precision (decimal places): ",
+            "Price precision"
+      )
+
+      pip_size = prompt_finite_number(
+            "Enter pip size: ",
+            "Pip size",
+            minimum=0,
+            minimum_is_strict=True
+      )
+
+      return pip_size, price_precision, False
+
+CONVERSION_SOURCE_LABELS = {
+      "not_required": "quote currency match",
+      "trade_exit_price": "Trade exit price",
+      "historical_market_data": "Historical market data",
+      "latest_market_data": "Latest market data",
+      "manual": "Manually supplied",
+}
+
+def resolve_forex_pip_value(
+      symbol,
+      pip_size,
+      price_precision,
+      is_standard_pair,
+      account,
+      exit_price,
+      exit_date,
+      exit_time
+):
+      account_currency = account["account_currency"]
+      currencies = get_forex_pair_currencies(symbol)
+      exit_timestamp = f"{exit_date} {exit_time}"
+
+      if is_standard_pair:
+            print("Standard pair detected.")
+
+      print(
+            f"Pip size: {pip_size} | "
+            f"Price precision: {price_precision}"
+      )
+
+      base_currency, quote_currency = (
+            currencies if currencies is not None else (None, None)
+      )
+
+      if quote_currency == account_currency:
+            pip_value = calculate_forex_pip_value(pip_size, 1.0)
+
+            print(
+                  f"Pip value for 1.00 lot: "
+                  f"${pip_value:,.2f} {account_currency}"
+            )
+            print(
+                  f"Source: {account_currency} quote currency"
+            )
+
+            return {
+                  "pip_value": pip_value,
+                  "conversion_rate": 1.0,
+                  "conversion_pair": None,
+                  "conversion_timestamp": None,
+                  "conversion_rate_source": "not_required",
+            }
+
+      if base_currency == account_currency:
+            conversion_rate = 1.0 / exit_price
+            pip_value = calculate_forex_pip_value(
+                  pip_size,
+                  conversion_rate
+            )
+
+            print(
+                  f"Pip value for 1.00 lot: "
+                  f"approximately ${pip_value:,.2f} "
+                  f"{account_currency}"
+            )
+            print(
+                  f"Conversion rate: {symbol.upper()} "
+                  f"{exit_price:.{price_precision}f}"
+            )
+            print("Source: Trade exit price")
+
+            return {
+                  "pip_value": pip_value,
+                  "conversion_rate": conversion_rate,
+                  "conversion_pair": symbol.upper(),
+                  "conversion_timestamp": exit_timestamp,
+                  "conversion_rate_source": "trade_exit_price",
+            }
+
+      conversion_pair_label = (
+            f"{quote_currency}/{account_currency}"
+      )
+
+      conversion_rate, rate_source = get_fx_conversion_rate(
+            quote_currency,
+            account_currency,
+            exit_timestamp
+      )
+
+      if conversion_rate is None:
+            print(
+                  f"A {conversion_pair_label} conversion "
+                  f"rate is required to value this pair in "
+                  f"{account_currency}, and no market data "
+                  "source is configured."
+            )
+
+            conversion_rate = prompt_finite_number(
+                  f"Enter {conversion_pair_label} "
+                  "conversion rate: ",
+                  "Conversion rate",
+                  minimum=0,
+                  minimum_is_strict=True
+            )
+
+            rate_source = "manual"
+
+      pip_value = calculate_forex_pip_value(
+            pip_size,
+            conversion_rate
+      )
+
+      print(
+            f"Pip value for 1.00 lot: "
+            f"approximately ${pip_value:,.2f} "
+            f"{account_currency}"
+      )
+      print(
+            f"Conversion rate: {conversion_pair_label} "
+            f"{conversion_rate}"
+      )
+      print(
+            f"Source: "
+            f"{CONVERSION_SOURCE_LABELS.get(rate_source, rate_source)}"
+      )
+
+      return {
+            "pip_value": pip_value,
+            "conversion_rate": conversion_rate,
+            "conversion_pair": conversion_pair_label,
+            "conversion_timestamp": exit_timestamp,
+            "conversion_rate_source": rate_source,
+      }
+
+def ensure_account_currency(account):
+      current_currency = account.get("account_currency")
+
+      if current_currency:
+            return current_currency
+
+      print(
+            "This account has no currency set. An "
+            "account currency is required before adding "
+            "a Forex trade."
+      )
+
+      while True:
+            currency_input = input(
+                  "Enter account currency (3-letter code, "
+                  "e.g. USD): "
+            ).strip().upper()
+
+            if (
+                  len(currency_input) == 3
+                  and currency_input.isalpha()
+                  and currency_input in STANDARD_FOREX_CURRENCIES
+            ):
+                  break
+
+            print(
+                  "Account currency must be a recognized "
+                  "three-letter currency code."
+            )
+
+      account["account_currency"] = currency_input
+
+      if not save_account(account):
+            print(
+                  "Warning: account currency could not be "
+                  "saved. It will be used for this trade "
+                  "only."
+            )
+
+      return currency_input
+
+def resolve_forex_pip_value_for_edit(
+      current,
+      new_symbol,
+      new_pip_size,
+      new_price_precision,
+      new_lot_size,
+      new_entry,
+      new_exit,
+      new_direction,
+      new_trade_date,
+      new_exit_time,
+      account
+):
+      account_currency = account.get("account_currency")
+
+      previous_pip_value = current.get("pip_value")
+
+      relevant_field_changed = (
+            new_symbol != current.get("symbol")
+            or new_exit != current.get("exit")
+            or new_lot_size != current.get("lot_size")
+            or new_trade_date != current.get("trade_date")
+            or new_exit_time != current.get("exit_time")
+            or account_currency != current.get("account_currency")
+      )
+
+      if (
+            not relevant_field_changed
+            and previous_pip_value is not None
+      ):
+            return {
+                  "pip_value": previous_pip_value,
+                  "conversion_rate": current.get(
+                        "conversion_rate"
+                  ),
+                  "conversion_pair": current.get(
+                        "conversion_pair"
+                  ),
+                  "conversion_timestamp": current.get(
+                        "conversion_timestamp"
+                  ),
+                  "conversion_rate_source": current.get(
+                        "conversion_rate_source"
+                  ),
+            }
+
+      if account_currency is None:
+            account_currency = ensure_account_currency(
+                  account
+            )
+
+      is_standard_pair = (
+            get_standard_forex_pip_profile(new_symbol)
+            is not None
+      )
+
+      new_info = resolve_forex_pip_value(
+            symbol=new_symbol,
+            pip_size=new_pip_size,
+            price_precision=new_price_precision,
+            is_standard_pair=is_standard_pair,
+            account=account,
+            exit_price=new_exit,
+            exit_date=new_trade_date,
+            exit_time=new_exit_time,
+      )
+
+      if (
+            previous_pip_value is not None
+            and abs(
+                  new_info["pip_value"] - previous_pip_value
+            )
+            >= FLOATING_POINT_TOLERANCE
+      ):
+            previous_points_pnl = calculate_points_pnl(
+                  current.get("direction", new_direction),
+                  current.get("entry", new_entry),
+                  current.get("exit", new_exit)
+            )
+
+            previous_pips_pnl = calculate_pips_pnl(
+                  previous_points_pnl,
+                  current.get("pip_size", new_pip_size)
+            )
+
+            previous_dollar_pnl = calculate_dollar_pnl(
+                  previous_pips_pnl,
+                  previous_pip_value,
+                  current.get("lot_size", new_lot_size)
+            )
+
+            new_points_pnl = calculate_points_pnl(
+                  new_direction,
+                  new_entry,
+                  new_exit
+            )
+
+            new_pips_pnl = calculate_pips_pnl(
+                  new_points_pnl,
+                  new_pip_size
+            )
+
+            new_dollar_pnl = calculate_dollar_pnl(
+                  new_pips_pnl,
+                  new_info["pip_value"],
+                  new_lot_size
+            )
+
+            print(
+                  f"Pip value would change from "
+                  f"${previous_pip_value:,.4f} to "
+                  f"${new_info['pip_value']:,.4f}, which "
+                  f"changes gross dollar P/L from "
+                  f"${previous_dollar_pnl:,.2f} to "
+                  f"${new_dollar_pnl:,.2f}."
+            )
+
+            confirm = input(
+                  "Apply this change? (yes/no): "
+            ).strip().lower()
+
+            if confirm != "yes":
+                  print(
+                        "Edit cancelled; trade left "
+                        "unchanged."
+                  )
+                  return None
+
+      return new_info
+
+def format_trade_price(trade, field_name):
+      value = trade.get(field_name)
+
+      if value is None:
+            return "N/A"
+
+      if trade.get("market_type") == "forex":
+            price_precision = trade.get("price_precision")
+
+            if price_precision is not None:
+                  return f"{value:.{price_precision}f}"
+
+      return str(value)
+
+def format_trade_unit_summary(trade):
+      market_type = trade.get("market_type", "futures")
+
+      if market_type == "forex":
+            pips_pnl = trade.get("pips_pnl")
+
+            if pips_pnl is None:
+                  return "Forex: N/A pips"
+
+            return f"Forex: {pips_pnl:,.1f} pips"
+
+      points_pnl = trade.get("points_pnl", 0)
+      ticks_pnl = trade.get("ticks_pnl")
+
+      if ticks_pnl is None:
+            return f"Futures: {points_pnl:,.2f} pts"
+
+      return (
+            f"Futures: {points_pnl:,.2f} pts "
+            f"({ticks_pnl:,.1f} ticks)"
+      )
+
+def print_trade_unit_detail(trade):
+      market_type = trade.get("market_type", "futures")
+
+      if market_type == "forex":
+            lot_size = trade.get("lot_size")
+            print(
+                  f"Lot Size: "
+                  f"{lot_size if lot_size is not None else 'N/A'}"
+            )
+
+            pip_size = trade.get("pip_size")
+            print(
+                  f"Pip Size: "
+                  f"{pip_size if pip_size is not None else 'N/A'}"
+            )
+
+            pip_value = trade.get("pip_value")
+
+            if pip_value is None:
+                  print("Pip Value: N/A")
+            else:
+                  print(f"Pip Value: ${pip_value:,.2f}")
+
+            pips_pnl = trade.get("pips_pnl")
+
+            if pips_pnl is None:
+                  print("Pips P/L: N/A")
+            else:
+                  print(f"Pips P/L: {pips_pnl:,.1f} pips")
+
+      else:
+            recognized_profile = get_known_futures_profile(
+                  trade.get("symbol", "")
+            )
+
+            if recognized_profile is not None:
+                  print(
+                        f"Instrument: {recognized_profile['root']} "
+                        f"- {recognized_profile['name']}"
+                  )
+
+            print(f"Contracts: {trade.get('contracts', 'N/A')}")
+
+            point_value = trade.get("point_value")
+
+            if point_value is None:
+                  print("Point Value: N/A")
+            else:
+                  print(f"Point Value: ${point_value:,.2f}")
+
+            tick_size = trade.get("tick_size")
+            tick_value = trade.get("tick_value")
+            ticks_pnl = trade.get("ticks_pnl")
+
+            if (
+                  tick_size is None
+                  or tick_value is None
+            ):
+                  print("Tick Size: N/A")
+                  print("Tick Value: N/A")
+                  print("Ticks P/L: N/A")
+            else:
+                  print(f"Tick Size: {tick_size}")
+                  print(f"Tick Value: ${tick_value:,.2f}")
+                  print(f"Ticks P/L: {ticks_pnl:,.1f} ticks")
+
+            print(
+                  f"Points P/L: "
+                  f"{trade.get('points_pnl', 0):,.2f} pts"
+            )
+
+UNIT_PERFORMANCE_BUCKETS = (
+      (
+            "futures_points",
+            "FUTURES POINTS PERFORMANCE",
+            "points_pnl",
+            "pts",
+            lambda trade: (
+                  trade.get("market_type", "futures") == "futures"
+            ),
+      ),
+      (
+            "futures_ticks",
+            "FUTURES TICKS PERFORMANCE",
+            "ticks_pnl",
+            "ticks",
+            lambda trade: (
+                  trade.get("market_type", "futures") == "futures"
+                  and trade.get("ticks_pnl") is not None
+            ),
+      ),
+      (
+            "forex_pips",
+            "FOREX PIPS PERFORMANCE",
+            "pips_pnl",
+            "pips",
+            lambda trade: (
+                  trade.get("market_type") == "forex"
+                  and trade.get("pips_pnl") is not None
+            ),
+      ),
+)
+
+def compute_unit_performance_stats(indexed_trades):
+      results = {}
+
+      for (
+            bucket_key,
+            title,
+            pnl_field,
+            unit_label,
+            bucket_filter
+      ) in UNIT_PERFORMANCE_BUCKETS:
+            matching = [
+                  (idx, trade) for (idx, trade) in indexed_trades
+                  if bucket_filter(trade)
+            ]
+
+            if not matching:
+                  results[bucket_key] = None
+                  continue
+
+            total = sum(
+                  trade.get(pnl_field, 0)
+                  for (idx, trade) in matching
+            )
+            count = len(matching)
+            average = total / count
+
+            best_idx, best_trade = max(
+                  matching,
+                  key=lambda pair: pair[1].get(pnl_field, 0)
+            )
+            worst_idx, worst_trade = min(
+                  matching,
+                  key=lambda pair: pair[1].get(pnl_field, 0)
+            )
+
+            gross_profit = sum(
+                  trade.get(pnl_field, 0)
+                  for (idx, trade) in matching
+                  if trade.get(pnl_field, 0) > 0
+            )
+            gross_loss = abs(sum(
+                  trade.get(pnl_field, 0)
+                  for (idx, trade) in matching
+                  if trade.get(pnl_field, 0) < 0
+            ))
+
+            wins = sum(
+                  1 for (idx, trade) in matching
+                  if trade.get(pnl_field, 0) > 0
+            )
+            losses = sum(
+                  1 for (idx, trade) in matching
+                  if trade.get(pnl_field, 0) < 0
+            )
+
+            average_win = gross_profit / wins if wins > 0 else 0
+            average_loss = gross_loss / losses if losses > 0 else 0
+
+            if gross_loss > 0:
+                  profit_factor = gross_profit / gross_loss
+            else:
+                  profit_factor = None
+
+            results[bucket_key] = {
+                  "title": title,
+                  "unit_label": unit_label,
+                  "total": total,
+                  "average": average,
+                  "best_idx": best_idx,
+                  "best_trade": best_trade,
+                  "best_value": best_trade.get(pnl_field, 0),
+                  "worst_idx": worst_idx,
+                  "worst_trade": worst_trade,
+                  "worst_value": worst_trade.get(pnl_field, 0),
+                  "gross_profit": gross_profit,
+                  "gross_loss": gross_loss,
+                  "average_win": average_win,
+                  "average_loss": average_loss,
+                  "profit_factor": profit_factor,
+                  "expectancy": average,
+            }
+
+      return results
+
+def print_unit_performance_stats(unit_stats):
+      for (bucket_key, title, pnl_field, unit_label, bucket_filter) in (
+            UNIT_PERFORMANCE_BUCKETS
+      ):
+            stats = unit_stats.get(bucket_key)
+
+            if stats is None:
+                  continue
+
+            unit = stats["unit_label"]
+
+            print()
+            print("-" * 31)
+            print(stats["title"])
+            print("-" * 31)
+            print()
+
+            print(f"{'Total:':<27}{stats['total']:,.2f} {unit}")
+            print(
+                  f"{'Average per Trade:':<27}"
+                  f"{stats['average']:.2f} {unit}"
+            )
+
+            print(
+                  f"{'Best Trade:':<27}#{stats['best_idx'] + 1} "
+                  f"{stats['best_trade']['symbol']} "
+                  f"({stats['best_value']:.2f} {unit})"
+            )
+
+            print(
+                  f"{'Worst Trade:':<27}#{stats['worst_idx'] + 1} "
+                  f"{stats['worst_trade']['symbol']} "
+                  f"({stats['worst_value']:.2f} {unit})"
+            )
+
+            print(
+                  f"{'Gross Profit:':<27}"
+                  f"{stats['gross_profit']:,.2f} {unit}"
+            )
+            print(
+                  f"{'Gross Loss:':<27}"
+                  f"-{stats['gross_loss']:,.2f} {unit}"
+            )
+            print(
+                  f"{'Average Win:':<27}"
+                  f"{stats['average_win']:,.2f} {unit}"
+            )
+            print(
+                  f"{'Average Loss:':<27}"
+                  f"-{stats['average_loss']:,.2f} {unit}"
+            )
+
+            if stats["profit_factor"] is None:
+                  print(
+                        f"{'Profit Factor:':<27}"
+                        "N/A (no losing trades)"
+                  )
+            else:
+                  print(
+                        f"{'Profit Factor:':<27}"
+                        f"{stats['profit_factor']:.2f}"
+                  )
+
+            print(
+                  f"{'Expectancy:':<27}"
+                  f"{stats['expectancy']:.2f} {unit}"
+            )
 
 def calculate_streaks(trades):
       if len(trades) == 0:
@@ -1962,7 +2957,7 @@ def display_equity_drawdown_history(
 
       print(
             "Note: drawdown is calculated from "
-            "closed-trade equity after commission,"
+            "closed-trade equity after commission, "
             "not intratrade floating P/L."
       )
 
@@ -2092,14 +3087,14 @@ def validate_and_normalize_trade(trade):
                   "Trade record must be a "
                   "JSON object."
             ]
-      
+
       errors = []
 
-      symbol = str(
+      raw_symbol_text = str(
             trade.get("symbol", "")
-      ).strip().lower()
-      
-      if symbol == "":
+      ).strip()
+
+      if raw_symbol_text == "":
             errors.append(
                   "Symbol cannot be blank."
             )
@@ -2108,10 +3103,29 @@ def validate_and_normalize_trade(trade):
             trade.get("direction", "")
       ).strip().lower()
 
-      if direction not in valid_directions: 
+      if direction not in valid_directions:
             errors.append(
                   "Direction must be long or short."
             )
+
+      market_type = str(
+            trade.get("market_type", "")
+      ).strip().lower()
+
+      if market_type == "":
+            market_type = "futures"
+
+      if market_type not in VALID_MARKET_TYPES:
+            errors.append(
+                  "Market type must be futures or "
+                  "forex."
+            )
+            market_type = "futures"
+
+      if market_type == "forex" and raw_symbol_text != "":
+            symbol = normalize_forex_symbol(raw_symbol_text)
+      else:
+            symbol = raw_symbol_text.lower()
 
       numeric_values = {}
 
@@ -2125,12 +3139,6 @@ def validate_and_normalize_trade(trade):
             (
                   "exit",
                   "Exit price",
-                  0,
-                  True
-            ),
-            (
-                  "point_value",
-                  "Point value",
                   0,
                   True
             ),
@@ -2165,18 +3173,236 @@ def validate_and_normalize_trade(trade):
                         )
             except ValueError as error:
                   errors.append(str(error))
-            
-      try:
-            contracts = get_positive_integer(
-                  trade.get("contracts"),
-                  "Contracts"
+
+      contracts = None
+      tick_size = None
+      tick_value = None
+      point_value = None
+
+      lot_size = None
+      pip_size = None
+      pip_value = None
+      price_precision = None
+
+      account_currency = None
+      conversion_rate = None
+      conversion_pair = None
+      conversion_timestamp = None
+      conversion_rate_source = None
+
+      if market_type == "futures":
+            try:
+                  contracts = get_positive_integer(
+                        trade.get("contracts"),
+                        "Contracts"
+                  )
+
+            except ValueError as error:
+                  errors.append(str(error))
+                  contracts = None
+
+            has_tick_metadata = (
+                  trade.get("tick_size") not in (None, "")
+                  and trade.get("tick_value") not in (None, "")
             )
 
-      except ValueError as error:
-            errors.append(str(error))
-            contracts = None
+            if has_tick_metadata:
+                  try:
+                        tick_size = get_finite_number(
+                              trade.get("tick_size"),
+                              "Tick size",
+                              0,
+                              True
+                        )
+                  except ValueError as error:
+                        errors.append(str(error))
+                        tick_size = None
 
-      try: 
+                  try:
+                        tick_value = get_finite_number(
+                              trade.get("tick_value"),
+                              "Tick value",
+                              0,
+                              True
+                        )
+                  except ValueError as error:
+                        errors.append(str(error))
+                        tick_value = None
+
+                  if (
+                        tick_size is not None
+                        and tick_value is not None
+                  ):
+                        point_value = tick_value / tick_size
+
+                        for (
+                              price_field,
+                              price_label
+                        ) in (
+                              ("entry", "Entry price"),
+                              ("exit", "Exit price"),
+                        ):
+                              price_value = numeric_values.get(
+                                    price_field
+                              )
+
+                              if (
+                                    price_value is not None
+                                    and not is_multiple_of(
+                                          price_value,
+                                          tick_size
+                                    )
+                              ):
+                                    errors.append(
+                                          f"{price_label} must "
+                                          f"align with a tick "
+                                          f"size of {tick_size}."
+                                    )
+            else:
+                  known_tick_size = get_known_futures_tick_size(
+                        symbol
+                  )
+
+                  try:
+                        point_value = get_finite_number(
+                              trade.get("point_value"),
+                              "Point value",
+                              0,
+                              True
+                        )
+                  except ValueError as error:
+                        errors.append(str(error))
+                        point_value = None
+
+                  if (
+                        known_tick_size is not None
+                        and point_value is not None
+                  ):
+                        tick_size = known_tick_size
+                        tick_value = point_value * known_tick_size
+
+      else:
+            try:
+                  lot_size = get_finite_number(
+                        trade.get("lot_size"),
+                        "Lot size",
+                        0,
+                        True
+                  )
+            except ValueError as error:
+                  errors.append(str(error))
+                  lot_size = None
+
+            standard_profile = get_standard_forex_pip_profile(
+                  symbol
+            )
+
+            pip_size_raw = trade.get("pip_size")
+            price_precision_raw = trade.get("price_precision")
+
+            if standard_profile is not None:
+                  pip_size = standard_profile["pip_size"]
+                  price_precision = standard_profile[
+                        "price_precision"
+                  ]
+            else:
+                  try:
+                        pip_size = get_finite_number(
+                              pip_size_raw,
+                              "Pip size",
+                              0,
+                              True
+                        )
+                  except ValueError as error:
+                        errors.append(str(error))
+                        pip_size = None
+
+                  try:
+                        price_precision = get_positive_integer(
+                              price_precision_raw,
+                              "Price precision"
+                        )
+                  except ValueError as error:
+                        errors.append(str(error))
+                        price_precision = None
+
+            try:
+                  pip_value = get_finite_number(
+                        trade.get("pip_value"),
+                        "Pip value",
+                        0,
+                        True
+                  )
+            except ValueError as error:
+                  errors.append(str(error))
+                  pip_value = None
+
+            if price_precision is not None:
+                  for (
+                        price_field,
+                        price_label
+                  ) in (
+                        ("entry", "Entry price"),
+                        ("exit", "Exit price"),
+                  ):
+                        price_value = numeric_values.get(
+                              price_field
+                        )
+
+                        if (
+                              price_value is not None
+                              and not is_multiple_of(
+                                    price_value,
+                                    10 ** -price_precision
+                              )
+                        ):
+                              errors.append(
+                                    f"{price_label} cannot "
+                                    f"exceed {price_precision} "
+                                    "decimal places for this "
+                                    "pair."
+                              )
+
+            account_currency_raw = trade.get(
+                  "account_currency"
+            )
+
+            if account_currency_raw in (None, ""):
+                  account_currency = None
+            else:
+                  account_currency = str(
+                        account_currency_raw
+                  ).strip().upper()
+
+            conversion_rate_raw = trade.get(
+                  "conversion_rate"
+            )
+
+            if conversion_rate_raw in (None, ""):
+                  conversion_rate = None
+            else:
+                  try:
+                        conversion_rate = get_finite_number(
+                              conversion_rate_raw,
+                              "Conversion rate",
+                              0,
+                              True
+                        )
+                  except ValueError as error:
+                        errors.append(str(error))
+                        conversion_rate = None
+
+            conversion_pair = (
+                  trade.get("conversion_pair") or None
+            )
+            conversion_timestamp = (
+                  trade.get("conversion_timestamp") or None
+            )
+            conversion_rate_source = (
+                  trade.get("conversion_rate_source") or None
+            )
+
+      try:
             trade_date = normalize_date_value(
                   trade.get(
                         "trade_date",
@@ -2230,11 +3456,28 @@ def validate_and_normalize_trade(trade):
             numeric_values["exit"],
       )
 
-      dollar_pnl = calculate_dollar_pnl(
-            points_pnl,
-            numeric_values["point_value"],
-            contracts
-      )
+      if market_type == "futures":
+            ticks_pnl = (
+                  calculate_ticks_pnl(points_pnl, tick_size)
+                  if tick_size not in (None, 0)
+                  else None
+            )
+            pips_pnl = None
+
+            dollar_pnl = calculate_dollar_pnl(
+                  points_pnl,
+                  point_value,
+                  contracts
+            )
+      else:
+            pips_pnl = calculate_pips_pnl(points_pnl, pip_size)
+            ticks_pnl = None
+
+            dollar_pnl = calculate_dollar_pnl(
+                  pips_pnl,
+                  pip_value,
+                  lot_size
+            )
 
       net_dollar_pnl = calculate_net_dollar_pnl(
             dollar_pnl,
@@ -2281,19 +3524,14 @@ def validate_and_normalize_trade(trade):
       normalized_trade.update({
             "symbol": symbol,
             "direction": direction,
+            "market_type": market_type,
 
             "entry": (
                   numeric_values["entry"]
-            ), 
+            ),
 
             "exit": (
                   numeric_values["exit"]
-            ), 
-
-            "contracts": contracts,
-
-            "point_value": (
-                  numeric_values["point_value"]
             ),
 
             "points_pnl": points_pnl,
@@ -2345,11 +3583,41 @@ def validate_and_normalize_trade(trade):
 
             "mistake": str(
                   trade.get("mistake", "")
-                  if trade.get("mistake") 
+                  if trade.get("mistake")
                   is not None
                   else ""
-            ).strip(), 
+            ).strip(),
       })
+
+      if market_type == "futures":
+            normalized_trade.update({
+                  "contracts": contracts,
+                  "tick_size": tick_size,
+                  "tick_value": tick_value,
+                  "point_value": point_value,
+                  "ticks_pnl": ticks_pnl,
+            })
+
+            for stale_field in FOREX_ONLY_FIELDS:
+                  normalized_trade.pop(stale_field, None)
+      else:
+            normalized_trade.update({
+                  "lot_size": lot_size,
+                  "pip_size": pip_size,
+                  "pip_value": pip_value,
+                  "price_precision": price_precision,
+                  "pips_pnl": pips_pnl,
+
+                  "standard_lot_units": STANDARD_LOT_UNITS,
+                  "account_currency": account_currency,
+                  "conversion_rate": conversion_rate,
+                  "conversion_pair": conversion_pair,
+                  "conversion_timestamp": conversion_timestamp,
+                  "conversion_rate_source": conversion_rate_source,
+            })
+
+            for stale_field in FUTURES_ONLY_FIELDS:
+                  normalized_trade.pop(stale_field, None)
 
       return normalized_trade, []
 
@@ -2429,6 +3697,27 @@ def validate_and_normalize_account(
                   starting_balance
             )
 
+      account_currency_raw = account.get(
+            "account_currency"
+      )
+
+      if account_currency_raw in (None, ""):
+            account_currency = None
+      else:
+            account_currency_text = str(
+                  account_currency_raw
+            ).strip().upper()
+
+            if (
+                  len(account_currency_text) == 3
+                  and account_currency_text.isalpha()
+                  and account_currency_text
+                  in STANDARD_FOREX_CURRENCIES
+            ):
+                  account_currency = account_currency_text
+            else:
+                  account_currency = None
+
       normalized_account = dict(account)
 
       normalized_account.update({
@@ -2441,7 +3730,9 @@ def validate_and_normalize_account(
 
             "high_water_mark": (
                   high_water_mark
-            )
+            ),
+
+            "account_currency": account_currency,
       })
 
       return normalized_account, []
@@ -2580,6 +3871,123 @@ def prompt_time(
                         "Invalid time. Please use "
                         "24-hour HH:MM format."
                   )
+
+def prompt_futures_price(
+      prompt,
+      field_name,
+      tick_size,
+      default = None
+):
+
+      while True:
+            raw_value = input(prompt).strip()
+
+            if (
+                  raw_value == ""
+                  and default is not None
+            ):
+                  return default
+
+            try:
+                  value = get_finite_number(
+                        raw_value,
+                        field_name,
+                        minimum=0,
+                        minimum_is_strict=True
+                  )
+
+            except ValueError as error:
+                  print(error)
+                  continue
+
+            if is_multiple_of(value, tick_size):
+                  return value
+
+            print(
+                  f"{field_name} must align with a "
+                  f"tick size of {tick_size}. "
+            )
+
+def prompt_forex_price(
+      prompt,
+      field_name,
+      price_precision,
+      default = None
+):
+
+      while True:
+            raw_value = input(prompt).strip()
+
+            if (
+                  raw_value == ""
+                  and default is not None
+            ):
+                  return default
+
+            try:
+                  value = get_finite_number(
+                        raw_value,
+                        field_name,
+                        minimum=0,
+                        minimum_is_strict=True
+                  )
+
+            except ValueError as error:
+                  print(error)
+                  continue
+
+            typed_decimal_places = (
+                  len(raw_value.split(".", 1)[1])
+                  if "." in raw_value
+                  else 0
+            )
+
+            if typed_decimal_places <= price_precision:
+                  return value
+
+            print(
+                  f"{field_name} cannot exceed "
+                  f"{price_precision} decimal places "
+                  "for this pair. "
+            )
+
+def resolve_futures_tick_metadata(symbol):
+      profile = get_known_futures_profile(symbol)
+
+      if profile is not None:
+            print_futures_instrument_profile(profile)
+
+            return profile["tick_size"], profile["tick_value"]
+
+      print(
+            "This contract is not in the built-in "
+            "specifications. Tick size and tick value "
+            "must be entered manually."
+      )
+
+      tick_size = prompt_finite_number(
+            "Enter tick size: ",
+            "Tick size",
+            minimum=0,
+            minimum_is_strict=True
+      )
+
+      tick_value = prompt_finite_number(
+            "Enter tick value: $",
+            "Tick value",
+            minimum=0,
+            minimum_is_strict=True
+      )
+
+      derived_point_value = tick_value / tick_size
+
+      print(
+            f"Tick size: {tick_size} | "
+            f"Tick value: ${tick_value:,.2f} | "
+            f"Point value: ${derived_point_value:,.2f}"
+      )
+
+      return tick_size, tick_value
 
 def get_trade_weekday(trade):
       trade_date_text = str(
@@ -2988,6 +4396,10 @@ while True:
             print("=========================")
             print(f"Account Name: {account['name']}")
             print(f"Account Type: {account['type']}")
+            print(
+                  "Account Currency: "
+                  f"{account.get('account_currency') or 'Not set'}"
+            )
             print(f"Starting Balance: ${starting_balance:,.2f}")
             print(f"Current Balance: ${current_balance:,.2f}")
             print(f"High Water Mark: ${high_water_mark:,.2f}")
@@ -3073,7 +4485,44 @@ while True:
                         )
                   )
             )
-      
+
+            current_account_currency = account.get(
+                  "account_currency"
+            )
+
+            while True:
+                  account_currency_input = input(
+                        (
+                              "Account Currency "
+                              f"(current: "
+                              f"{current_account_currency or 'Not set'}"
+                              "): "
+                        )
+                  ).strip().upper()
+
+                  if account_currency_input == "":
+                        new_account_currency = (
+                              current_account_currency
+                        )
+                        break
+
+                  if (
+                        len(account_currency_input) == 3
+                        and account_currency_input.isalpha()
+                        and account_currency_input
+                        in STANDARD_FOREX_CURRENCIES
+                  ):
+                        new_account_currency = (
+                              account_currency_input
+                        )
+                        break
+
+                  print(
+                        "Account currency must be a "
+                        "recognized three-letter currency "
+                        "code."
+                  )
+
             equity_data = (
                   calculate_equity_drawdown_history(
                         trades,
@@ -3087,6 +4536,7 @@ while True:
                   "name": new_account_name,
                   "type": new_account_type,
                   "starting_balance": new_starting_balance,
+                  "account_currency": new_account_currency,
 
                   "high_water_mark": (
                         equity_data[
@@ -3110,6 +4560,12 @@ while True:
                   )
 
       elif choice == "3":
+            market_type = prompt_choice(
+                  "Market type (Futures/Forex): ",
+                  VALID_MARKET_TYPES,
+                  "Market type must be futures or forex."
+            )
+
             symbol = prompt_required_text(
                   "Enter symbol: ",
                   "Symbol"
@@ -3121,31 +4577,67 @@ while True:
                   "Direction must be long or short."
             )
 
-            entry = prompt_finite_number(
-                  "Enter entry price: $",
-                  "Entry price",
-                  minimum=0,
-                  minimum_is_strict=True
-            )
+            if market_type == "futures":
+                  contracts = prompt_positive_integer(
+                        "Enter number of contracts: ",
+                        "Contracts"
+                  )
 
-            exit_price = prompt_finite_number(
-                  "Enter exit price: $",
-                  "Exit price",
-                  minimum=0,
-                  minimum_is_strict=True
-            )
+                  tick_size, tick_value = (
+                        resolve_futures_tick_metadata(symbol)
+                  )
 
-            contracts = prompt_positive_integer(
-                  "Enter number of contracts: ",
-                  "Contracts"
-            )
+                  entry = prompt_futures_price(
+                        "Enter entry price: $",
+                        "Entry price",
+                        tick_size
+                  )
 
-            point_value = prompt_finite_number(
-                  "Enter point value: $",
-                  "Point value",
-                  minimum=0,
-                  minimum_is_strict=True
-            )
+                  exit_price = prompt_futures_price(
+                        "Enter exit price: $",
+                        "Exit price",
+                        tick_size
+                  )
+
+                  lot_size = None
+                  pip_size = None
+                  pip_value = None
+                  price_precision = None
+
+                  account_currency = None
+                  conversion_rate = None
+                  conversion_pair = None
+                  conversion_timestamp = None
+                  conversion_rate_source = None
+            else:
+                  ensure_account_currency(account)
+
+                  lot_size = prompt_finite_number(
+                        "Enter lot size: ",
+                        "Lot size",
+                        minimum=0,
+                        minimum_is_strict=True
+                  )
+
+                  pip_size, price_precision, is_standard_pair = (
+                        resolve_forex_pair_profile(symbol)
+                  )
+
+                  entry = prompt_forex_price(
+                        "Enter entry price: ",
+                        "Entry price",
+                        price_precision
+                  )
+
+                  exit_price = prompt_forex_price(
+                        "Enter exit price: ",
+                        "Exit price",
+                        price_precision
+                  )
+
+                  contracts = None
+                  tick_size = None
+                  tick_value = None
 
             risk_amount = prompt_finite_number(
                   "Enter risk amount: $",
@@ -3172,10 +4664,28 @@ while True:
                   "Enter exit time (HH:MM) "
             )
 
-            duration = calculate_duration(
-                  entry_time,
-                  exit_time
-            )
+            if market_type == "forex":
+                  pip_value_info = resolve_forex_pip_value(
+                        symbol=symbol,
+                        pip_size=pip_size,
+                        price_precision=price_precision,
+                        is_standard_pair=is_standard_pair,
+                        account=account,
+                        exit_price=exit_price,
+                        exit_date=trade_date,
+                        exit_time=exit_time,
+                  )
+
+                  pip_value = pip_value_info["pip_value"]
+                  account_currency = account.get("account_currency")
+                  conversion_rate = pip_value_info["conversion_rate"]
+                  conversion_pair = pip_value_info["conversion_pair"]
+                  conversion_timestamp = pip_value_info[
+                        "conversion_timestamp"
+                  ]
+                  conversion_rate_source = pip_value_info[
+                        "conversion_rate_source"
+                  ]
 
             strategy_method_input = input("Enter Strategy / Method (separate multiple with commas or +): ").strip()
             strategy_methods = dedupe_case_insensitive(split_strategy_methods(strategy_method_input))
@@ -3193,84 +4703,62 @@ while True:
             notes = input("Enter notes: ").strip()
             mistake = input("Enter mistake: ").strip()
 
-            points_pnl = calculate_points_pnl(
-                  direction, 
-                  entry, 
-                  exit_price
-            )
-
-            dollar_pnl = calculate_dollar_pnl(
-                  points_pnl,
-                  point_value,
-                  contracts
-            )
-
-            net_dollar_pnl = calculate_net_dollar_pnl(
-                  dollar_pnl, 
-                  commission
-            )
-            
-            realized_r = calculate_realized_r(
-                  dollar_pnl,
-                  risk_amount
-            )
-
-            if not all(
-                  math.isfinite(value)
-                  for value in (
-                        points_pnl,
-                        dollar_pnl,
-                        net_dollar_pnl,
-                        realized_r
-                  )
-            ):
-                  print(
-                        "Calculated trade values are too "
-                        "large to store safely."
-                  )
-
-                  continue
-
-            result = calculate_result(points_pnl)
-            net_result = calculate_net_result(net_dollar_pnl)
-
             trade = {
                   "symbol": symbol,
                   "direction": direction,
+                  "market_type": market_type,
 
                   "entry": entry,
                   "exit": exit_price,
 
                   "contracts": contracts,
-                  "point_value": point_value,
+                  "tick_size": tick_size,
+                  "tick_value": tick_value,
 
-                  "points_pnl": points_pnl,
-                  "dollar_pnl": dollar_pnl,
+                  "lot_size": lot_size,
+                  "pip_size": pip_size,
+                  "pip_value": pip_value,
+                  "price_precision": price_precision,
+
+                  "standard_lot_units": STANDARD_LOT_UNITS,
+                  "account_currency": account_currency,
+                  "conversion_rate": conversion_rate,
+                  "conversion_pair": conversion_pair,
+                  "conversion_timestamp": conversion_timestamp,
+                  "conversion_rate_source": conversion_rate_source,
+
                   "commission": commission,
-                  "net_dollar_pnl": net_dollar_pnl,
-                  "result": result,
-                  "net_result": net_result,
-
                   "risk_amount": risk_amount,
-                  "realized_r": realized_r,
 
                   "trade_date": trade_date,
                   "entry_time": entry_time,
                   "exit_time": exit_time,
-                  "duration": duration,
 
                   "strategy_methods": strategy_methods,
                   "setup_components": setup_components,
-                  "session": session,
                   "notes": notes,
                   "mistake": mistake
             }
-            trades.append(trade)
-           
-            if save_trades(trades): 
+
+            normalized_trade, errors = validate_and_normalize_trade(trade)
+
+            if errors:
+                  print(
+                        "Trade was not added due to the "
+                        "following errors:"
+                  )
+
+                  for error in errors:
+                        print(f"  - {error}")
+
+                  continue
+
+            trades.append(normalized_trade)
+
+            if save_trades(trades):
                   print("Trade added successfully.")
 
-            else: 
+            else:
                   trades.pop()
 
                   print(
@@ -3296,7 +4784,7 @@ while True:
                               f"{trade.get('trade_date', 'N/A').replace('-', ' ')} | "
                               f"{trade['direction']} | "
                               f"{trade.get('net_result', trade.get('result', 'N/A'))} | "
-                              f"{trade['points_pnl']:,.2f} pts | "
+                              f"{format_trade_unit_summary(trade)} | "
                               f"Net: ${net_pnl:,.2f}"
                         )
 
@@ -3320,17 +4808,12 @@ while True:
                         print(f"Direction: {trade['direction']}")
                         print(f"Date: {trade.get('trade_date', 'N/A').replace('-', ' ')}")
 
-                        print(f"Entry: {trade['entry']}")
-                        print(f"Exit: {trade['exit']}")
-                        print(f"Contracts: {trade.get('contracts', 'N/A')}")
+                        print(f"Market Type: {trade.get('market_type', 'futures')}")
+                        print(f"Entry: {format_trade_price(trade, 'entry')}")
+                        print(f"Exit: {format_trade_price(trade, 'exit')}")
 
-                        point_value = trade.get("point_value")
-                        if point_value is None:
-                              print("Point Value: N/A")
-                        else:
-                              print(f"Point Value: ${point_value:,.2f}")
+                        print_trade_unit_detail(trade)
 
-                        print(f"Points P/L: {trade['points_pnl']:,.2f} pts")
                         print(
                               f"Gross Dollar P/L: "
                               f"${trade.get('dollar_pnl', 0):,.2f}"
@@ -3372,7 +4855,7 @@ while True:
 
             for i in range(len(trades)):
                   trade = trades[i]
-                  print(f"{i + 1}. {trade['symbol']} {trade['direction']} Points P/L: {trade['points_pnl']}")
+                  print(f"{i + 1}. {trade['symbol']} {trade['direction']} {format_trade_unit_summary(trade)}")
 
             try:
                   trade_number = int(input("Which trade number would you like to edit? "))
@@ -3384,13 +4867,17 @@ while True:
 
             if 0 <= edit_index < len(trades):
                   current = trades[edit_index]
+                  current_market_type = current.get(
+                        "market_type",
+                        "futures"
+                  )
 
                   symbol_input = input(
                         f"Symbol (current: {current['symbol']}): "
                         ).lower().strip()
                   new_symbol = (
-                        symbol_input 
-                        if symbol_input != "" 
+                        symbol_input
+                        if symbol_input != ""
                         else current["symbol"]
                   )
 
@@ -3399,79 +4886,660 @@ while True:
                               "Direction "
                               f"(current: "
                               f"{current['direction']}): "
-                        ), 
+                        ),
                         valid_directions,
                         (
                               "Direction must be "
                               "long or short."
-                        ), 
+                        ),
                         default=(
                               current["direction"]
                         )
                   )
 
+                  new_market_type = prompt_choice(
+                        (
+                              "Market type "
+                              f"(current: "
+                              f"{current_market_type}): "
+                        ),
+                        VALID_MARKET_TYPES,
+                        (
+                              "Market type must be "
+                              "futures or forex."
+                        ),
+                        default=current_market_type
+                  )
+
+                  new_contracts = None
+                  new_tick_size = None
+                  new_tick_value = None
+                  new_point_value = current.get("point_value")
+
+                  new_lot_size = None
+                  new_pip_size = None
+                  new_pip_value = None
+                  new_price_precision = None
+
                   try:
-                        new_entry = (
-                              prompt_finite_number(
-                                    (
-                                          "Entry price "
-                                          f"(current: "
-                                          f"${current['entry']}): "
-                                    ),
-                                    "Entry price",
-                                    minimum=0,
-                                    minimum_is_strict=True,
-                                    default=current["entry"]
-                              )
-                        )
-
-                        new_exit = (
-                              prompt_finite_number(
-                                    (
-                                          "Exit price "
-                                          f"(current: "
-                                          f"${current['exit']}): "
-                                    ),
-                                    "Exit price",
-                                    minimum=0,
-                                    minimum_is_strict=True,
-                                    default=current["exit"]
-                              )
-                        )
-
-                        new_contracts = (
-                              prompt_positive_integer(
-                                    (
-                                          "Contracts "
-                                          f"(current: "
-                                          f"{current.get('contracts')}): "
-                                    ),
-                                    "Contracts",
-                                    default=(
-                                          current[
-                                                "contracts"
-                                          ]
+                        if new_market_type == "futures":
+                              if current_market_type == "futures":
+                                    new_contracts = (
+                                          prompt_positive_integer(
+                                                (
+                                                      "Contracts "
+                                                      f"(current: "
+                                                      f"{current.get('contracts')}): "
+                                                ),
+                                                "Contracts",
+                                                default=(
+                                                      current.get(
+                                                            "contracts"
+                                                      )
+                                                )
+                                          )
                                     )
-                              )
-                        )
-                  
-                        new_point_value = (
-                              prompt_finite_number(
-                                    (
-                                          "Point value "
-                                          f"(current: "
-                                          f"${current['point_value']}): "
-                                    ),
-                                    "Point value",
-                                    minimum=0,
-                                    minimum_is_strict=True,
-                                    default=(
-                                          current[
-                                                "point_value"
-                                          ]
+
+                                    has_current_tick_metadata = (
+                                          current.get("tick_size")
+                                          is not None
+                                          and current.get("tick_value")
+                                          is not None
                                     )
-                              )
-                        )
+
+                                    if has_current_tick_metadata:
+                                          recognized_profile = (
+                                                get_known_futures_profile(
+                                                      new_symbol
+                                                )
+                                          )
+
+                                          if recognized_profile is not None:
+                                                implied_point_value = (
+                                                      recognized_profile[
+                                                            "point_value"
+                                                      ]
+                                                )
+
+                                                existing_point_value = (
+                                                      current.get(
+                                                            "point_value"
+                                                      )
+                                                )
+
+                                                if (
+                                                      existing_point_value
+                                                      is not None
+                                                      and abs(
+                                                            implied_point_value
+                                                            - existing_point_value
+                                                      )
+                                                      >= FLOATING_POINT_TOLERANCE
+                                                ):
+                                                      print(
+                                                            "The built-in "
+                                                            "specification "
+                                                            "for "
+                                                            f"{recognized_profile['root']} "
+                                                            "implies a point "
+                                                            "value of "
+                                                            f"${implied_point_value:,.2f}, "
+                                                            "which is "
+                                                            "inconsistent "
+                                                            "with this "
+                                                            "trade's existing "
+                                                            "point value of "
+                                                            f"${existing_point_value:,.2f}. "
+                                                            "This would "
+                                                            "change its "
+                                                            "historical gross "
+                                                            "P/L, so the edit "
+                                                            "was not applied."
+                                                      )
+
+                                                      continue
+
+                                                print_futures_instrument_profile(
+                                                      recognized_profile
+                                                )
+
+                                                new_tick_size = (
+                                                      recognized_profile[
+                                                            "tick_size"
+                                                      ]
+                                                )
+                                                new_tick_value = (
+                                                      recognized_profile[
+                                                            "tick_value"
+                                                      ]
+                                                )
+                                          else:
+                                                new_tick_size = (
+                                                      prompt_finite_number(
+                                                            (
+                                                                  "Tick size "
+                                                                  f"(current: "
+                                                                  f"{current.get('tick_size')}): "
+                                                            ),
+                                                            "Tick size",
+                                                            minimum=0,
+                                                            minimum_is_strict=True,
+                                                            default=current.get(
+                                                                  "tick_size"
+                                                            )
+                                                      )
+                                                )
+
+                                                new_tick_value = (
+                                                      prompt_finite_number(
+                                                            (
+                                                                  "Tick value "
+                                                                  f"(current: "
+                                                                  f"{current.get('tick_value')}): "
+                                                            ),
+                                                            "Tick value",
+                                                            minimum=0,
+                                                            minimum_is_strict=True,
+                                                            default=current.get(
+                                                                  "tick_value"
+                                                            )
+                                                      )
+                                                )
+
+                                          new_entry = prompt_futures_price(
+                                                (
+                                                      "Entry price "
+                                                      f"(current: "
+                                                      f"${current['entry']}): "
+                                                ),
+                                                "Entry price",
+                                                new_tick_size,
+                                                default=current["entry"]
+                                          )
+
+                                          new_exit = prompt_futures_price(
+                                                (
+                                                      "Exit price "
+                                                      f"(current: "
+                                                      f"${current['exit']}): "
+                                                ),
+                                                "Exit price",
+                                                new_tick_size,
+                                                default=current["exit"]
+                                          )
+                                    else:
+                                          recognized_profile = (
+                                                get_known_futures_profile(
+                                                      new_symbol
+                                                )
+                                          )
+
+                                          if recognized_profile is not None:
+                                                known_tick_size = (
+                                                      recognized_profile[
+                                                            "tick_size"
+                                                      ]
+                                                )
+                                                known_tick_value = (
+                                                      recognized_profile[
+                                                            "tick_value"
+                                                      ]
+                                                )
+
+                                                print_futures_instrument_profile(
+                                                      recognized_profile
+                                                )
+
+                                                implied_point_value = (
+                                                      known_tick_value
+                                                      / known_tick_size
+                                                )
+
+                                                existing_point_value = (
+                                                      current.get(
+                                                            "point_value"
+                                                      )
+                                                )
+
+                                                if (
+                                                      existing_point_value
+                                                      is not None
+                                                      and abs(
+                                                            implied_point_value
+                                                            - existing_point_value
+                                                      )
+                                                      >= FLOATING_POINT_TOLERANCE
+                                                ):
+                                                      print(
+                                                            "The built-in "
+                                                            "specification "
+                                                            "for "
+                                                            f"{recognized_profile['root']} "
+                                                            "implies a point "
+                                                            "value of "
+                                                            f"${implied_point_value:,.2f}, "
+                                                            "which is "
+                                                            "inconsistent "
+                                                            "with this "
+                                                            "trade's existing "
+                                                            "point value of "
+                                                            f"${existing_point_value:,.2f}. "
+                                                            "This would "
+                                                            "change its "
+                                                            "historical gross "
+                                                            "P/L, so the edit "
+                                                            "was not applied."
+                                                      )
+
+                                                      continue
+
+                                                new_tick_size = known_tick_size
+                                                new_tick_value = known_tick_value
+
+                                                new_entry = prompt_futures_price(
+                                                      (
+                                                            "Entry price "
+                                                            f"(current: "
+                                                            f"${current['entry']}): "
+                                                      ),
+                                                      "Entry price",
+                                                      new_tick_size,
+                                                      default=current["entry"]
+                                                )
+
+                                                new_exit = prompt_futures_price(
+                                                      (
+                                                            "Exit price "
+                                                            f"(current: "
+                                                            f"${current['exit']}): "
+                                                      ),
+                                                      "Exit price",
+                                                      new_tick_size,
+                                                      default=current["exit"]
+                                                )
+                                          else:
+                                                print(
+                                                      "This contract is not "
+                                                      "in the built-in "
+                                                      "specifications. Tick "
+                                                      "size and tick value "
+                                                      "are unspecified for "
+                                                      "this legacy trade. "
+                                                      "Leave both blank to "
+                                                      "keep them "
+                                                      "unspecified."
+                                                )
+
+                                                tick_size_input = input(
+                                                      "Tick size (current: N/A): "
+                                                ).strip()
+
+                                                tick_value_input = input(
+                                                      "Tick value (current: N/A): "
+                                                ).strip()
+
+                                                if (
+                                                      tick_size_input == ""
+                                                      and tick_value_input == ""
+                                                ):
+                                                      new_tick_size = None
+                                                      new_tick_value = None
+
+                                                      new_point_value = (
+                                                            prompt_finite_number(
+                                                                  (
+                                                                        "Point value "
+                                                                        f"(current: "
+                                                                        f"${current.get('point_value')}): "
+                                                                  ),
+                                                                  "Point value",
+                                                                  minimum=0,
+                                                                  minimum_is_strict=True,
+                                                                  default=current.get(
+                                                                        "point_value"
+                                                                  )
+                                                            )
+                                                      )
+
+                                                      new_entry = (
+                                                            prompt_finite_number(
+                                                                  (
+                                                                        "Entry price "
+                                                                        f"(current: "
+                                                                        f"${current['entry']}): "
+                                                                  ),
+                                                                  "Entry price",
+                                                                  minimum=0,
+                                                                  minimum_is_strict=True,
+                                                                  default=current["entry"]
+                                                            )
+                                                      )
+
+                                                      new_exit = (
+                                                            prompt_finite_number(
+                                                                  (
+                                                                        "Exit price "
+                                                                        f"(current: "
+                                                                        f"${current['exit']}): "
+                                                                  ),
+                                                                  "Exit price",
+                                                                  minimum=0,
+                                                                  minimum_is_strict=True,
+                                                                  default=current["exit"]
+                                                            )
+                                                      )
+                                                elif (
+                                                      tick_size_input == ""
+                                                      or tick_value_input == ""
+                                                ):
+                                                      print(
+                                                            "Tick size and tick "
+                                                            "value must both be "
+                                                            "provided together."
+                                                      )
+
+                                                      continue
+                                                else:
+                                                      new_tick_size = (
+                                                            get_finite_number(
+                                                                  tick_size_input,
+                                                                  "Tick size",
+                                                                  0,
+                                                                  True
+                                                            )
+                                                      )
+
+                                                      new_tick_value = (
+                                                            get_finite_number(
+                                                                  tick_value_input,
+                                                                  "Tick value",
+                                                                  0,
+                                                                  True
+                                                            )
+                                                      )
+
+                                                      implied_point_value = (
+                                                            new_tick_value
+                                                            / new_tick_size
+                                                      )
+
+                                                      existing_point_value = (
+                                                            current.get(
+                                                                  "point_value"
+                                                            )
+                                                      )
+
+                                                      if (
+                                                            existing_point_value
+                                                            is not None
+                                                            and abs(
+                                                                  implied_point_value
+                                                                  - existing_point_value
+                                                            )
+                                                            >= FLOATING_POINT_TOLERANCE
+                                                      ):
+                                                            print(
+                                                                  "Tick size and "
+                                                                  "tick value imply "
+                                                                  "a point value of "
+                                                                  f"${implied_point_value}, "
+                                                                  "which is "
+                                                                  "inconsistent "
+                                                                  "with this "
+                                                                  "trade's existing "
+                                                                  "point value of "
+                                                                  f"${existing_point_value}. "
+                                                                  "This would "
+                                                                  "change its "
+                                                                  "historical gross "
+                                                                  "P/L, so the edit "
+                                                                  "was not applied."
+                                                            )
+
+                                                            continue
+
+                                                      new_entry = prompt_futures_price(
+                                                            (
+                                                                  "Entry price "
+                                                                  f"(current: "
+                                                                  f"${current['entry']}): "
+                                                            ),
+                                                            "Entry price",
+                                                            new_tick_size,
+                                                            default=current["entry"]
+                                                      )
+
+                                                      new_exit = prompt_futures_price(
+                                                            (
+                                                                  "Exit price "
+                                                                  f"(current: "
+                                                                  f"${current['exit']}): "
+                                                            ),
+                                                            "Exit price",
+                                                            new_tick_size,
+                                                            default=current["exit"]
+                                                      )
+                              else:
+                                    new_contracts = (
+                                          prompt_positive_integer(
+                                                "Contracts: ",
+                                                "Contracts"
+                                          )
+                                    )
+
+                                    new_tick_size, new_tick_value = (
+                                          resolve_futures_tick_metadata(
+                                                new_symbol
+                                          )
+                                    )
+
+                                    new_entry = prompt_futures_price(
+                                          (
+                                                "Entry price "
+                                                f"(current: "
+                                                f"${current['entry']}): "
+                                          ),
+                                          "Entry price",
+                                          new_tick_size,
+                                          default=current["entry"]
+                                    )
+
+                                    new_exit = prompt_futures_price(
+                                          (
+                                                "Exit price "
+                                                f"(current: "
+                                                f"${current['exit']}): "
+                                          ),
+                                          "Exit price",
+                                          new_tick_size,
+                                          default=current["exit"]
+                                    )
+                        else:
+                              if current_market_type == "forex":
+                                    new_lot_size = (
+                                          prompt_finite_number(
+                                                (
+                                                      "Lot size "
+                                                      f"(current: "
+                                                      f"{current.get('lot_size')}): "
+                                                ),
+                                                "Lot size",
+                                                minimum=0,
+                                                minimum_is_strict=True,
+                                                default=current.get(
+                                                      "lot_size"
+                                                )
+                                          )
+                                    )
+
+                                    standard_profile = (
+                                          get_standard_forex_pip_profile(
+                                                new_symbol
+                                          )
+                                    )
+
+                                    if standard_profile is not None:
+                                          new_pip_size = standard_profile[
+                                                "pip_size"
+                                          ]
+                                          new_price_precision = (
+                                                standard_profile[
+                                                      "price_precision"
+                                                ]
+                                          )
+
+                                          print(
+                                                f"Standard pair detected. "
+                                                f"Using pip size "
+                                                f"{new_pip_size} and price "
+                                                f"precision "
+                                                f"{new_price_precision}."
+                                          )
+                                    else:
+                                          default_pip_size = current.get(
+                                                "pip_size"
+                                          )
+                                          default_price_precision = current.get(
+                                                "price_precision"
+                                          )
+
+                                          pip_size_input = input(
+                                                (
+                                                      "Pip size "
+                                                      f"(current: "
+                                                      f"{default_pip_size}): "
+                                                )
+                                          ).strip()
+
+                                          precision_input = input(
+                                                (
+                                                      "Price precision "
+                                                      f"(current: "
+                                                      f"{default_price_precision}): "
+                                                )
+                                          ).strip()
+
+                                          if (
+                                                pip_size_input == ""
+                                                and precision_input == ""
+                                          ):
+                                                new_pip_size = default_pip_size
+                                                new_price_precision = (
+                                                      default_price_precision
+                                                )
+                                          else:
+                                                new_pip_size = get_finite_number(
+                                                      pip_size_input
+                                                      if pip_size_input != ""
+                                                      else default_pip_size,
+                                                      "Pip size",
+                                                      0,
+                                                      True
+                                                )
+
+                                                new_price_precision = (
+                                                      get_positive_integer(
+                                                            precision_input
+                                                            if precision_input != ""
+                                                            else default_price_precision,
+                                                            "Price precision"
+                                                      )
+                                                )
+
+                                    new_entry = prompt_forex_price(
+                                          (
+                                                "Entry price "
+                                                f"(current: "
+                                                f"{format_trade_price(current, 'entry')}): "
+                                          ),
+                                          "Entry price",
+                                          new_price_precision,
+                                          default=current["entry"]
+                                    )
+
+                                    new_exit = prompt_forex_price(
+                                          (
+                                                "Exit price "
+                                                f"(current: "
+                                                f"{format_trade_price(current, 'exit')}): "
+                                          ),
+                                          "Exit price",
+                                          new_price_precision,
+                                          default=current["exit"]
+                                    )
+                              else:
+                                    new_lot_size = prompt_finite_number(
+                                          "Lot size: ",
+                                          "Lot size",
+                                          minimum=0,
+                                          minimum_is_strict=True
+                                    )
+
+                                    standard_profile = (
+                                          get_standard_forex_pip_profile(
+                                                new_symbol
+                                          )
+                                    )
+
+                                    if standard_profile is not None:
+                                          new_pip_size = standard_profile[
+                                                "pip_size"
+                                          ]
+                                          new_price_precision = (
+                                                standard_profile[
+                                                      "price_precision"
+                                                ]
+                                          )
+
+                                          print(
+                                                f"Standard pair detected. "
+                                                f"Using pip size "
+                                                f"{new_pip_size} and price "
+                                                f"precision "
+                                                f"{new_price_precision}."
+                                          )
+                                    else:
+                                          new_price_precision = (
+                                                prompt_positive_integer(
+                                                      (
+                                                            "Price precision "
+                                                            "(decimal "
+                                                            "places): "
+                                                      ),
+                                                      "Price precision"
+                                                )
+                                          )
+
+                                          new_pip_size = (
+                                                prompt_finite_number(
+                                                      "Pip size: ",
+                                                      "Pip size",
+                                                      minimum=0,
+                                                      minimum_is_strict=True
+                                                )
+                                          )
+
+                                    new_entry = prompt_forex_price(
+                                          (
+                                                "Entry price "
+                                                f"(current: "
+                                                f"${current['entry']}): "
+                                          ),
+                                          "Entry price",
+                                          new_price_precision,
+                                          default=current["entry"]
+                                    )
+
+                                    new_exit = prompt_forex_price(
+                                          (
+                                                "Exit price "
+                                                f"(current: "
+                                                f"${current['exit']}): "
+                                          ),
+                                          "Exit price",
+                                          new_price_precision,
+                                          default=current["exit"]
+                                    )
 
                         new_risk_amount = (
                               prompt_finite_number(
@@ -3547,7 +5615,60 @@ while True:
                               new_entry_time,
                               new_exit_time
                         )
-      
+
+                        if new_market_type == "forex":
+                              new_pip_value_info = (
+                                    resolve_forex_pip_value_for_edit(
+                                          current=current,
+                                          new_symbol=new_symbol,
+                                          new_pip_size=new_pip_size,
+                                          new_price_precision=new_price_precision,
+                                          new_lot_size=new_lot_size,
+                                          new_entry=new_entry,
+                                          new_exit=new_exit,
+                                          new_direction=new_direction,
+                                          new_trade_date=new_trade_date,
+                                          new_exit_time=new_exit_time,
+                                          account=account,
+                                    )
+                              )
+
+                              if new_pip_value_info is None:
+                                    continue
+
+                              new_pip_value = (
+                                    new_pip_value_info["pip_value"]
+                              )
+                              new_account_currency = account.get(
+                                    "account_currency"
+                              )
+                              new_conversion_rate = (
+                                    new_pip_value_info[
+                                          "conversion_rate"
+                                    ]
+                              )
+                              new_conversion_pair = (
+                                    new_pip_value_info[
+                                          "conversion_pair"
+                                    ]
+                              )
+                              new_conversion_timestamp = (
+                                    new_pip_value_info[
+                                          "conversion_timestamp"
+                                    ]
+                              )
+                              new_conversion_rate_source = (
+                                    new_pip_value_info[
+                                          "conversion_rate_source"
+                                    ]
+                              )
+                        else:
+                              new_account_currency = None
+                              new_conversion_rate = None
+                              new_conversion_pair = None
+                              new_conversion_timestamp = None
+                              new_conversion_rate_source = None
+
                   except ValueError:
                         print("Invalid time format. Please use HH:MM.")
                         continue
@@ -3600,81 +5721,60 @@ while True:
                   new_mistake = mistake_input if mistake_input != "" else current.get("mistake", "")
 
 
-                  new_points_pnl = calculate_points_pnl( 
-                        new_direction, 
-                        new_entry,
-                        new_exit
-                  )
-                  
-                  new_dollar_pnl = calculate_dollar_pnl(
-                        new_points_pnl, 
-                        new_point_value, 
-                        new_contracts
-                  )
+                  updated_trade_input = dict(current)
 
-                  new_net_dollar_pnl = calculate_net_dollar_pnl(
-                        new_dollar_pnl,
-                        new_commission
-                  )
-
-                  new_realized_r = calculate_realized_r(
-                        new_dollar_pnl,
-                        new_risk_amount
-                  )
-
-                  if not all(
-                        math.isfinite(value)
-                        for value in [
-                              new_points_pnl,
-                              new_dollar_pnl,
-                              new_net_dollar_pnl,
-                              new_realized_r
-                        ]
-                  ):
-                        print(
-                              "Calculated trade values "
-                              "are too large to store "
-                              "safely."
-                        )
-
-                        continue
-
-                  new_result = calculate_result(new_points_pnl)
-                  new_net_result = calculate_net_result(
-                        new_net_dollar_pnl
-                  )
-
-                  updated_trade = {
+                  updated_trade_input.update({
                         "symbol": new_symbol,
                         "direction": new_direction,
+                        "market_type": new_market_type,
 
                         "entry": new_entry,
                         "exit": new_exit,
 
                         "contracts": new_contracts,
+                        "tick_size": new_tick_size,
+                        "tick_value": new_tick_value,
                         "point_value": new_point_value,
 
-                        "points_pnl": new_points_pnl,
-                        "dollar_pnl": new_dollar_pnl,
-                        "commission": new_commission,
-                        "net_dollar_pnl": new_net_dollar_pnl,
-                        "result": new_result,
-                        "net_result": new_net_result,
+                        "lot_size": new_lot_size,
+                        "pip_size": new_pip_size,
+                        "pip_value": new_pip_value,
+                        "price_precision": new_price_precision,
 
+                        "standard_lot_units": STANDARD_LOT_UNITS,
+                        "account_currency": new_account_currency,
+                        "conversion_rate": new_conversion_rate,
+                        "conversion_pair": new_conversion_pair,
+                        "conversion_timestamp": new_conversion_timestamp,
+                        "conversion_rate_source": new_conversion_rate_source,
+
+                        "commission": new_commission,
                         "risk_amount": new_risk_amount,
-                        "realized_r": new_realized_r,
 
                         "trade_date": new_trade_date,
                         "entry_time": new_entry_time,
                         "exit_time": new_exit_time,
-                        "duration": new_duration,
 
                         "strategy_methods": new_strategy_methods,
                         "setup_components": new_setup_components,
-                        "session": new_session,
                         "notes": new_notes,
                         "mistake": new_mistake
-                  }
+                  })
+
+                  updated_trade, errors = validate_and_normalize_trade(
+                        updated_trade_input
+                  )
+
+                  if errors:
+                        print(
+                              "Trade was not updated due "
+                              "to the following errors:"
+                        )
+
+                        for error in errors:
+                              print(f"  - {error}")
+
+                        continue
 
                   previous_trade = current
 
@@ -3704,7 +5804,7 @@ while True:
             else:
                   for i in range(len(trades)):
                         trade = trades[i]
-                        print(f"{i + 1}. {trade['symbol']} {trade['direction']} Points P/L: {trade['points_pnl']}")
+                        print(f"{i + 1}. {trade['symbol']} {trade['direction']} {format_trade_unit_summary(trade)}")
 
                   try:
                         trade_number = int(input("Which trade number would you like to delete? "))
@@ -3731,7 +5831,7 @@ while True:
                               f"Are you sure you want to delete "
                               f"{trade_to_delete['symbol']} "
                               f"({delete_net_result}, "
-                              f"{trade_to_delete['points_pnl']:,.2f} pts)? "
+                              f"{format_trade_unit_summary(trade_to_delete)})? "
                               f"(yes/no): "
                         ).lower().strip()
                         if confirm == "yes":
@@ -3778,7 +5878,6 @@ while True:
                   net_losses = 0
                   net_breakevens = 0
 
-                  total_points_pnl = 0
                   total_dollar_pnl = 0
                   total_commission = 0
                   total_net_dollar_pnl = 0
@@ -3788,40 +5887,34 @@ while True:
                   risk_trades = 0
 
                   total_duration = 0
-                  timed_trades = 0 
+                  timed_trades = 0
                   longest_duration = None
                   shortest_duration = None
-                  earliest_entry_time = None 
+                  earliest_entry_time = None
                   latest_entry_time = None
                   best_r_trade = None
                   worst_r_trade = None
                   best_r_idx = None
                   worst_r_idx = None
 
-                  best_points_trade = trades[0]
-                  worst_points_trade = trades[0]
                   best_dollar_trade = trades[0]
                   worst_dollar_trade = trades[0]
                   best_net_trade = trades[0]
                   worst_net_trade = trades[0]
-                  best_points_idx = 0
-                  worst_points_idx = 0
                   best_dollar_idx = 0
                   worst_dollar_idx = 0
                   best_net_idx = 0
                   worst_net_idx = 0
 
                   for i, trade in enumerate(trades):
-                        points_pnl = trade['points_pnl']
                         dollar_pnl = trade.get('dollar_pnl', 0)
                         commission = trade.get('commission', 0)
                         net_dollar_pnl = trade.get(
-                              "net_dollar_pnl", 
+                              "net_dollar_pnl",
                               trade.get("dollar_pnl", 0)
                         )
                         result = trade['result']
 
-                        total_points_pnl += points_pnl
                         total_dollar_pnl += dollar_pnl
                         total_commission += commission
                         total_net_dollar_pnl += net_dollar_pnl
@@ -3881,14 +5974,6 @@ while True:
                         else:
                               net_breakevens += 1
 
-                        if trade['points_pnl'] > best_points_trade['points_pnl']:
-                              best_points_trade = trade
-                              best_points_idx = i
-
-                        if trade['points_pnl'] < worst_points_trade['points_pnl']:
-                              worst_points_trade = trade
-                              worst_points_idx = i
-
                         if trade.get('dollar_pnl', 0) > best_dollar_trade.get('dollar_pnl', 0):
                               best_dollar_trade = trade
                               best_dollar_idx = i
@@ -3923,7 +6008,6 @@ while True:
                   win_rate = (wins / total_trades) * 100
                   net_win_rate = (net_wins / total_trades) * 100
 
-                  average_points_pnl = total_points_pnl / total_trades
                   average_dollar_pnl = total_dollar_pnl / total_trades
                   average_commission = total_commission / total_trades
                   average_net_dollar_pnl = (
@@ -3956,18 +6040,6 @@ while True:
                         ) < 0
                   )
 
-                  gross_points_profit = sum(
-                        abs(trade["points_pnl"]) \
-                        for trade in trades
-                        if trade["points_pnl"] > 0
-                  )
-                  
-                  gross_points_loss = sum(
-                        abs(trade["points_pnl"])
-                        for trade in trades
-                        if trade["points_pnl"] < 0
-                  )
-
                   gross_dollar_profit = sum(
                         abs(trade.get("dollar_pnl", 0))
                         for trade in trades
@@ -3979,9 +6051,6 @@ while True:
                         if trade.get("dollar_pnl", 0) < 0
                   )
                   
-                  average_points_win = gross_points_profit / wins if wins > 0 else 0
-                  average_points_loss = gross_points_loss / losses if losses > 0 else 0
-
                   average_dollar_win = gross_dollar_profit / wins if wins > 0 else 0
                   average_dollar_loss = gross_dollar_loss / losses if losses > 0 else 0
 
@@ -3997,11 +6066,6 @@ while True:
                         else 0
                   )
 
-                  if gross_points_loss > 0:
-                        points_profit_factor = gross_points_profit / gross_points_loss
-                  else:
-                        points_profit_factor = None
-
                   if gross_dollar_loss > 0:
                         dollar_profit_factor = gross_dollar_profit / gross_dollar_loss
                   else:
@@ -4015,7 +6079,6 @@ while True:
                   else:
                         net_profit_factor = None
 
-                  points_expectancy = average_points_pnl
                   dollar_expectancy = average_dollar_pnl
                   net_expectancy = average_net_dollar_pnl
 
@@ -4046,32 +6109,13 @@ while True:
                   print(f"{'Break-even Trades:':<27}{breakevens}")
                   print(f"{'Win Rate:':<27}{win_rate:.2f}%")
 
-                  print()
-                  print("-" * 31)
-                  print("POINTS PERFORMANCE")
-                  print("-" * 31)
-                  print()
-                  print(f"{'Total Points:':<27}{total_points_pnl:,.2f} pts")
-                  print(f"{'Average Points per Trade:':<27}{average_points_pnl:.2f} pts")
-                  print(
-                        f"{'Best Trade:':<27}#{best_points_idx + 1} {best_points_trade['symbol']} "
-                        f"({best_points_trade['points_pnl']:.2f} pts)"
+                  unit_performance_stats = compute_unit_performance_stats(
+                        list(enumerate(trades))
                   )
-                  print(
-                        f"{'Worst Trade:':<27}#{worst_points_idx + 1} {worst_points_trade['symbol']} "
-                        f"({worst_points_trade['points_pnl']:.2f} pts)"
+
+                  print_unit_performance_stats(
+                        unit_performance_stats
                   )
-                  print(f"{'Gross Points Profit:':<27}{gross_points_profit:,.2f} pts")
-                  print(f"{'Gross Points Loss:':<27}-{gross_points_loss:,.2f} pts")
-                  print(f"{'Average Points Win:':<27}{average_points_win:,.2f} pts")
-                  print(f"{'Average Points Loss:':<27}-{average_points_loss:,.2f} pts")
-
-                  if points_profit_factor is None:
-                        print(f"{'Points Profit Factor:':<27}N/A (no losing trades)")
-                  else:
-                        print(f"{'Points Profit Factor:':<27}{points_profit_factor:.2f}")
-
-                  print(f"{'Points Expectancy:':<27}{points_expectancy:.2f} pts")
 
                   print()
                   print("-" * 31)
@@ -4228,6 +6272,24 @@ while True:
 
                   symbol_filter = input("Symbol: ").lower().strip()
                   direction_filter = input ("Direction: ").lower().strip()
+
+                  while True:
+                        market_type_filter = input(
+                              "Market Type (futures/forex, "
+                              "leave blank for all): "
+                        ).lower().strip()
+
+                        if (
+                              market_type_filter == ""
+                              or market_type_filter in VALID_MARKET_TYPES
+                        ):
+                              break
+
+                        print(
+                              "Market type must be futures "
+                              "or forex."
+                        )
+
                   result_filter = input ("Result: ").lower().strip()
                   net_result_filter = input("Net Result: ").lower().strip()
                   setup_filter = input ("Setup Component: ").strip()
@@ -4257,10 +6319,22 @@ while True:
                         trade = trades[i]
                         matches = True
 
-                        if symbol_filter != "" and trade.get("symbol", "").lower().strip() != symbol_filter:
+                        if (
+                              symbol_filter != ""
+                              and normalize_forex_symbol(trade.get("symbol", ""))
+                              != normalize_forex_symbol(symbol_filter)
+                        ):
                               matches = False
                         if direction_filter != "" and trade.get("direction", "").lower().strip() != direction_filter:
                               matches = False
+
+                        if (
+                              market_type_filter != ""
+                              and trade.get("market_type", "futures")
+                              != market_type_filter
+                        ):
+                              matches = False
+
                         if result_filter != "" and trade.get("result", "").lower().strip() != result_filter:
                               matches = False
 
@@ -4310,16 +6384,12 @@ while True:
                               print(f"Direction: {trade['direction']}")
                               print(f"Date: {trade.get('trade_date', 'N/A').replace('-', ' ')}")
 
-                              print(f"Entry: {trade['entry']}")
-                              print(f"Exit: {trade['exit']}")
-                              print(f"Contracts: {trade.get('contracts', 'N/A')}")
-                              point_value = trade.get("point_value")
-                              if point_value is None:
-                                    print("Point Value: N/A")
-                              else:
-                                    print(f"Point Value: ${point_value:,.2f}")
+                              print(f"Market Type: {trade.get('market_type', 'futures')}")
+                              print(f"Entry: {format_trade_price(trade, 'entry')}")
+                              print(f"Exit: {format_trade_price(trade, 'exit')}")
 
-                              print(f"Points P/L: {trade['points_pnl']:,.2f} pts")
+                              print_trade_unit_detail(trade)
+
                               print(
                                     f"Gross Dollar P/L: "
                                     f"${trade.get('dollar_pnl', 0):,.2f}"
@@ -4363,6 +6433,24 @@ while True:
 
                   symbol_filter = input("Symbol: ").lower().strip()
                   direction_filter = input ("Direction: ").lower().strip()
+
+                  while True:
+                        market_type_filter = input(
+                              "Market Type (futures/forex, "
+                              "leave blank for all): "
+                        ).lower().strip()
+
+                        if (
+                              market_type_filter == ""
+                              or market_type_filter in VALID_MARKET_TYPES
+                        ):
+                              break
+
+                        print(
+                              "Market type must be futures "
+                              "or forex."
+                        )
+
                   result_filter = input ("Result: ").lower().strip()
                   net_result_filter = input("Net Result: ").lower().strip()
                   setup_filter = input ("Setup Component: ").strip()
@@ -4390,10 +6478,22 @@ while True:
                   for idx, trade in enumerate(trades): 
                         matches = True 
                         
-                        if symbol_filter != "" and trade.get("symbol", "").lower().strip() != symbol_filter:
-                              matches = False 
-                        if direction_filter != "" and trade.get("direction", "").lower().strip() != direction_filter: 
-                              matches = False 
+                        if (
+                              symbol_filter != ""
+                              and normalize_forex_symbol(trade.get("symbol", ""))
+                              != normalize_forex_symbol(symbol_filter)
+                        ):
+                              matches = False
+                        if direction_filter != "" and trade.get("direction", "").lower().strip() != direction_filter:
+                              matches = False
+
+                        if (
+                              market_type_filter != ""
+                              and trade.get("market_type", "futures")
+                              != market_type_filter
+                        ):
+                              matches = False
+
                         if result_filter != "" and trade.get("result", "").lower().strip() != result_filter:
                               matches = False
 
@@ -4446,7 +6546,6 @@ while True:
                         net_losses = 0
                         net_breakevens = 0
 
-                        total_points_pnl = 0
                         total_dollar_pnl = 0
                         total_commission = 0
                         total_net_dollar_pnl = 0
@@ -4455,12 +6554,8 @@ while True:
                         total_realized_r = 0
                         risk_trades = 0
 
-                        best_points_trade = filtered_trades[0]
-                        worst_points_trade = filtered_trades[0]
                         best_dollar_trade = filtered_trades[0]
                         worst_dollar_trade = filtered_trades[0]
-                        best_points_idx = filtered_indices[0]
-                        worst_points_idx = filtered_indices[0]
                         best_dollar_idx = filtered_indices[0]
                         worst_dollar_idx = filtered_indices[0]
                         best_net_trade = filtered_trades[0]
@@ -4479,17 +6574,15 @@ while True:
                         best_r_idx = None
                         worst_r_idx = None
                         
-                        for i, trade in enumerate(filtered_trades): 
-                              points_pnl = trade["points_pnl"]
+                        for i, trade in enumerate(filtered_trades):
                               dollar_pnl = trade.get("dollar_pnl", 0)
                               commission = trade.get("commission", 0)
                               net_dollar_pnl = trade.get(
                                     "net_dollar_pnl",
                                     trade.get("dollar_pnl", 0)
                               )
-                              result = trade["result"]    
+                              result = trade["result"]
 
-                              total_points_pnl += points_pnl
                               total_dollar_pnl += dollar_pnl
                               total_commission += commission
                               total_net_dollar_pnl += net_dollar_pnl
@@ -4512,14 +6605,6 @@ while True:
                                     net_losses += 1
                               else:
                                     net_breakevens += 1
-
-                              if points_pnl > best_points_trade["points_pnl"]:
-                                    best_points_trade = trade
-                                    best_points_idx = filtered_indices[i]
-
-                              if points_pnl < worst_points_trade["points_pnl"]:
-                                    worst_points_trade = trade
-                                    worst_points_idx = filtered_indices[i]
 
                               if dollar_pnl > best_dollar_trade.get("dollar_pnl", 0):
                                     best_dollar_trade = trade
@@ -4584,7 +6669,6 @@ while True:
                         win_rate = (wins / total_trades) * 100
                         net_win_rate = (net_wins / total_trades) * 100
 
-                        average_points_pnl = total_points_pnl / total_trades
                         average_dollar_pnl = total_dollar_pnl / total_trades
                         
                         average_commission = (
@@ -4641,18 +6725,6 @@ while True:
                         
                         net_expectancy = average_net_dollar_pnl
 
-                        gross_points_profit = sum(
-                              trade["points_pnl"]
-                              for trade in filtered_trades
-                              if trade["points_pnl"] > 0
-                        )
-
-                        gross_points_loss = sum(
-                              abs(trade["points_pnl"])
-                              for trade in filtered_trades
-                              if trade["points_pnl"] < 0
-                        )
-
                         gross_dollar_profit = sum(
                               trade.get("dollar_pnl", 0) 
                               for trade in filtered_trades 
@@ -4672,23 +6744,14 @@ while True:
                               average_risk = 0
                               average_realized_r = 0
 
-                        average_points_win = gross_points_profit / wins if wins > 0 else 0
-                        average_points_loss = gross_points_loss / losses if losses > 0 else 0
-
                         average_dollar_win = gross_dollar_profit / wins if wins > 0 else 0
                         average_dollar_loss = gross_dollar_loss / losses if losses > 0 else 0
 
-                        if gross_points_loss > 0:
-                              points_profit_factor = gross_points_profit / gross_points_loss
-                        else:
-                              points_profit_factor = None
-                        
                         if gross_dollar_loss > 0:
                               dollar_profit_factor = gross_dollar_profit / gross_dollar_loss
                         else:
                               dollar_profit_factor = None
 
-                        points_expectancy = average_points_pnl
                         dollar_expectancy = average_dollar_pnl
 
                         print("\n" + "=" * 50)
@@ -4706,32 +6769,18 @@ while True:
                         print(f"{'Break-even Trades:':<27}{breakevens}")
                         print(f"{'Win Rate:':<27}{win_rate:.2f}%")
 
-                        print()
-                        print("-" * 31)
-                        print("POINTS PERFORMANCE")
-                        print("-" * 31)
-                        print()
-                        print(f"{'Total Points:':<27}{total_points_pnl:,.2f} pts")
-                        print(f"{'Average Points per Trade:':<27}{average_points_pnl:.2f} pts")
-                        print(
-                              f"{'Best Trade:':<27}#{best_points_idx + 1} {best_points_trade['symbol']} "
-                              f"({best_points_trade['points_pnl']:.2f} pts)"
+                        unit_performance_stats = compute_unit_performance_stats(
+                              list(
+                                    zip(
+                                          filtered_indices,
+                                          filtered_trades
+                                    )
+                              )
                         )
-                        print(
-                              f"{'Worst Trade:':<27}#{worst_points_idx + 1} {worst_points_trade['symbol']} "
-                              f"({worst_points_trade['points_pnl']:.2f} pts)"
+
+                        print_unit_performance_stats(
+                              unit_performance_stats
                         )
-                        print(f"{'Gross Points Profit:':<27}{gross_points_profit:,.2f} pts")
-                        print(f"{'Gross Points Loss:':<27}-{gross_points_loss:,.2f} pts")
-                        print(f"{'Average Points Win:':<27}{average_points_win:,.2f} pts")
-                        print(f"{'Average Points Loss:':<27}-{average_points_loss:,.2f} pts")
-
-                        if points_profit_factor is None:
-                              print(f"{'Points Profit Factor:':<27}N/A (no losing trades)")
-                        else:
-                              print(f"{'Points Profit Factor:':<27}{points_profit_factor:.2f}")
-
-                        print(f"{'Points Expectancy:':<27}{points_expectancy:.2f} pts")
 
                         print()
                         print("-" * 31)

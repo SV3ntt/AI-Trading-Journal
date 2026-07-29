@@ -2,5 +2,6 @@
     "name": "Savion Trades",
     "type": "Funded",
     "starting_balance": 25000.0,
-    "high_water_mark": 29513.81
+    "high_water_mark": 29513.81,
+    "account_currency": null
 }
