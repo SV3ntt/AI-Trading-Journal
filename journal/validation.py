@@ -1,4 +1,5 @@
 import math
+from datetime import datetime
 
 from journal.constants import (
     FOREX_ONLY_FIELDS,
@@ -688,4 +689,125 @@ def validate_and_normalize_account(
       })
 
       return normalized_account, []
+
+_WEEKDAY_NAMES = (
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+)
+
+def _futures_time_implausibility_reason(weekday, minutes_since_midnight):
+      if weekday == 5:
+            return "Futures markets are closed all day Saturday."
+
+      if weekday == 6 and minutes_since_midnight < 18 * 60:
+            return (
+                  "Futures markets have not yet reopened for "
+                  "the week (Sunday before 18:00 ET)."
+            )
+
+      if weekday == 4 and minutes_since_midnight >= 17 * 60:
+            return (
+                  "Futures markets are closed for the weekend "
+                  "(Friday at or after 17:00 ET)."
+            )
+
+      if (
+            weekday in (0, 1, 2, 3)
+            and 17 * 60 <= minutes_since_midnight < 18 * 60
+      ):
+            return (
+                  "This falls in the daily Futures maintenance "
+                  "break (17:00-18:00 ET)."
+            )
+
+      return None
+
+def _forex_time_implausibility_reason(weekday, minutes_since_midnight):
+      if weekday == 5:
+            return "Forex markets are closed all day Saturday."
+
+      if weekday == 6 and minutes_since_midnight < 17 * 60:
+            return (
+                  "Forex markets have not yet reopened for "
+                  "the week (Sunday before 17:00 ET)."
+            )
+
+      if weekday == 4 and minutes_since_midnight >= 17 * 60:
+            return (
+                  "Forex markets are closed for the weekend "
+                  "(Friday at or after 17:00 ET)."
+            )
+
+      return None
+
+def get_trade_time_warnings(
+      market_type,
+      trade_date,
+      entry_time,
+      exit_time
+):
+      try:
+            date_value = datetime.strptime(
+                  trade_date,
+                  "%Y-%m-%d"
+            )
+            entry_value = datetime.strptime(
+                  entry_time,
+                  "%H:%M"
+            )
+            exit_value = datetime.strptime(
+                  exit_time,
+                  "%H:%M"
+            )
+      except (TypeError, ValueError):
+            return []
+
+      entry_weekday = date_value.weekday()
+      entry_minutes = (
+            entry_value.hour * 60
+            + entry_value.minute
+      )
+      exit_minutes = (
+            exit_value.hour * 60
+            + exit_value.minute
+      )
+
+      # An exit clock time earlier than the entry clock time on the same
+      # trade_date is treated as crossing midnight into the next day --
+      # this mirrors calculate_duration()'s own overnight handling, so an
+      # overnight trade is never flagged as "exit before entry".
+      exit_weekday = (
+            (entry_weekday + 1) % 7
+            if exit_minutes < entry_minutes
+            else entry_weekday
+      )
+
+      checker = (
+            _futures_time_implausibility_reason
+            if market_type == "futures"
+            else _forex_time_implausibility_reason
+      )
+
+      messages = []
+
+      entry_reason = checker(entry_weekday, entry_minutes)
+      if entry_reason is not None:
+            messages.append(
+                  f"Entry time ({_WEEKDAY_NAMES[entry_weekday]} "
+                  f"{entry_time} ET, approximate): {entry_reason}"
+            )
+
+      exit_reason = checker(exit_weekday, exit_minutes)
+      if exit_reason is not None:
+            messages.append(
+                  f"Exit time ({_WEEKDAY_NAMES[exit_weekday]} "
+                  f"{exit_time} ET, approximate): {exit_reason}"
+            )
+
+      return list(dict.fromkeys(messages))
 

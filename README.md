@@ -45,7 +45,7 @@ Net Profit
 Growth Percentage
 High Water Mark
 Current Drawdown
-Drawdown Percentage
+Current Drawdown Percentage
 📈 Trading Statistics
 The journal automatically calculates professional trading statistics.
 

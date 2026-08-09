@@ -98,6 +98,39 @@ class AccountStatusTests(unittest.TestCase):
         self.assertIn("ACCOUNT STATUS", output)
         save_mock.assert_called_once()
 
+    def test_current_and_maximum_drawdown_labels_are_unambiguous(self):
+        equity = make_equity_data(
+            current_drawdown=50.0,
+            current_drawdown_percentage=5.0,
+            maximum_drawdown=200.0,
+            maximum_drawdown_percentage=20.0,
+        )
+
+        with patch.object(
+            menu,
+            "calculate_equity_drawdown_history",
+            return_value=equity,
+        ):
+            _, output = capture_output(
+                menu.handle_account_status,
+                [],
+                {
+                    "name": "Funded",
+                    "type": "Funded",
+                    "starting_balance": 1000.0,
+                    "high_water_mark": 1050.0,
+                },
+            )
+
+        self.assertIn("Current Drawdown: -$50.00", output)
+        self.assertIn("Current Drawdown Percentage: -5.00%", output)
+        self.assertIn("Maximum Drawdown: -$200.00", output)
+        self.assertIn("Maximum Drawdown Percentage: -20.00%", output)
+        # neither label is a bare, unqualified "Drawdown:" that a reader
+        # could confuse for the other figure
+        self.assertNotIn("\nDrawdown:", output)
+        self.assertNotIn("\nDrawdown Percentage:", output)
+
     def test_returns_none_when_new_account_cannot_be_saved(self):
         with (
             patch.object(menu, "prompt_required_text", return_value="Account"),
@@ -526,6 +559,60 @@ class AddTradeTests(unittest.TestCase):
             "Unspecified",
         )
 
+    def test_declining_time_plausibility_warning_prevents_add_and_save(self):
+        trades = []
+        normalized = make_trade()
+        patchers = self.futures_patches(normalized)
+
+        with (
+            patchers[0], patchers[1], patchers[2], patchers[3], patchers[4],
+            patchers[5], patchers[6], patchers[7], patchers[8],
+            patchers[9] as validate_mock, patchers[10] as save_mock,
+            patch.object(
+                menu,
+                "confirm_trade_time_is_plausible",
+                return_value=False,
+            ) as confirm_mock,
+        ):
+            _, output = capture_output(
+                menu.handle_add_trade,
+                trades,
+                {"account_currency": "USD"},
+            )
+
+        self.assertEqual(trades, [])
+        self.assertIn("Trade not saved.", output)
+        confirm_mock.assert_called_once()
+        validate_mock.assert_not_called()
+        save_mock.assert_not_called()
+
+    def test_accepting_time_plausibility_warning_still_adds_trade(self):
+        trades = []
+        normalized = make_trade()
+        patchers = self.futures_patches(normalized)
+
+        with (
+            patchers[0], patchers[1], patchers[2], patchers[3], patchers[4],
+            patchers[5], patchers[6], patchers[7], patchers[8],
+            patchers[9] as validate_mock, patchers[10] as save_mock,
+            patch.object(
+                menu,
+                "confirm_trade_time_is_plausible",
+                return_value=True,
+            ) as confirm_mock,
+        ):
+            _, output = capture_output(
+                menu.handle_add_trade,
+                trades,
+                {"account_currency": "USD"},
+            )
+
+        self.assertEqual(trades, [normalized])
+        self.assertIn("Trade added successfully", output)
+        confirm_mock.assert_called_once()
+        validate_mock.assert_called_once()
+        save_mock.assert_called_once_with(trades)
+
 
 class ViewTradeTests(unittest.TestCase):
     def test_empty_trade_list_prints_message(self):
@@ -618,6 +705,7 @@ class EditTradeGuardTests(unittest.TestCase):
         normalized_trade,
         validation_errors=None,
         save_result=True,
+        confirm_time_result=True,
     ):
         if validation_errors is None:
             validation_errors = []
@@ -675,6 +763,11 @@ class EditTradeGuardTests(unittest.TestCase):
                 menu,
                 "prompt_time",
                 side_effect=["09:30", "09:45"],
+            ),
+            patch.object(
+                menu,
+                "confirm_trade_time_is_plausible",
+                return_value=confirm_time_result,
             ),
             patch.object(menu, "calculate_duration", return_value=15),
             patch.object(
@@ -775,6 +868,37 @@ class EditTradeGuardTests(unittest.TestCase):
         self.assertIn("inconsistent", output)
         self.assertIn("edit was not applied", output)
         save_mock.assert_not_called()
+
+    def test_declining_time_plausibility_warning_leaves_trade_unchanged(self):
+        updated = make_trade(notes="Updated")
+
+        current, trades, output, validate_mock, save_mock = (
+            self.run_existing_futures_edit(
+                normalized_trade=updated,
+                confirm_time_result=False,
+            )
+        )
+
+        self.assertIs(trades[0], current)
+        self.assertIn("Edit cancelled; trade left unchanged.", output)
+        validate_mock.assert_not_called()
+        save_mock.assert_not_called()
+
+    def test_accepting_time_plausibility_warning_still_updates_trade(self):
+        updated = make_trade(notes="Updated")
+
+        current, trades, output, validate_mock, save_mock = (
+            self.run_existing_futures_edit(
+                normalized_trade=updated,
+                confirm_time_result=True,
+            )
+        )
+
+        self.assertIsNot(trades[0], current)
+        self.assertEqual(trades, [updated])
+        self.assertIn("Trade updated successfully", output)
+        validate_mock.assert_called_once()
+        save_mock.assert_called_once_with(trades)
 
 
 class DeleteTradeTests(unittest.TestCase):

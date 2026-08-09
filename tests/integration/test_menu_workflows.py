@@ -390,7 +390,82 @@ class MenuWorkflowIntegrationTests(unittest.TestCase):
         self.assertEqual(reloaded_account["high_water_mark"], 25098.5)
         self.assertIn("Current Balance: $25,098.50", output)
         self.assertIn("Net Profit: $98.50", output)
-        self.assertIn("Drawdown: $0.00", output)
+        self.assertIn("Current Drawdown: $0.00", output)
+
+    def test_editing_a_winner_into_a_loser_fully_rebuilds_high_water_mark(self):
+        # Sprint 29 regression: two trades, both originally winners (each
+        # sets a new peak). The second (later-dated) trade is then edited
+        # into a loss through the real handle_edit_trade -> save_trades ->
+        # storage round trip. Because nothing follows it chronologically,
+        # the account must show a genuine, non-zero drawdown afterward --
+        # not the stale/incorrect "high water mark == current balance,
+        # $0.00 drawdown" that prompted this investigation.
+        account = {
+            "name": "Funded",
+            "type": "Funded",
+            "starting_balance": 25000.0,
+            "high_water_mark": 25000.0,
+            "account_currency": "USD",
+        }
+        self.assertTrue(storage.save_account(account))
+
+        trades = []
+        self.add_futures_trade(trades, account)  # trade 1: 2026-07-30, net +98.50
+        self.add_futures_trade(
+            trades, account, trade_date="2026-07-31"
+        )  # trade 2: net +98.50 (about to be edited into a loss)
+
+        reloaded_trades = storage.load_trades()
+        self.assertEqual(len(reloaded_trades), 2)
+
+        edit_answers = [
+            "2",         # trade number
+            "",          # symbol keep
+            "",          # direction keep
+            "",          # market_type keep
+            "",          # contracts keep
+            "",          # entry keep
+            "7495.25",   # exit -- turns trade 2 into a loss
+            "",          # risk keep
+            "",          # commission keep
+            "",          # trade_date keep
+            "",          # entry_time keep
+            "",          # exit_time keep
+            "",          # strategy keep
+            "",          # setup keep
+            "",          # notes keep
+            "",          # mistake keep
+        ]
+
+        with patch("builtins.input", side_effect=edit_answers):
+            capture_output(
+                menu.handle_edit_trade,
+                reloaded_trades,
+                account,
+            )
+
+        edited_trades = storage.load_trades()
+        self.assertEqual(edited_trades[1]["net_dollar_pnl"], -54.0)
+
+        reloaded_account = storage.load_account()
+        updated, output = capture_output(
+            menu.handle_account_status,
+            edited_trades,
+            reloaded_account,
+        )
+
+        # Peak was 25,098.50 after trade 1; trade 2 (now -$54.00) brings
+        # the balance to 25,044.50 -- a real $54.00 drawdown, not $0.00.
+        self.assertEqual(updated["high_water_mark"], 25098.5)
+        self.assertIn("Current Balance: $25,044.50", output)
+        self.assertIn("High Water Mark: $25,098.50", output)
+        self.assertIn("Current Drawdown: -$54.00", output)
+        self.assertNotIn("Current Drawdown: $0.00", output)
+
+        reloaded_account_after = storage.load_account()
+        self.assertEqual(
+            reloaded_account_after["high_water_mark"], 25098.5
+        )
 
     def test_saved_mixed_trades_feed_statistics_and_analytics_displays(self):
         trades = []

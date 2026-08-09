@@ -52,6 +52,7 @@ from journal.display import (
     show_menu,
 )
 from journal.prompts import (
+    confirm_trade_time_is_plausible,
     ensure_account_currency,
     get_optional_date,
     prompt_choice,
@@ -200,8 +201,8 @@ def handle_account_status(trades, account):
             print("Net P/L: $0.00")
             print("Growth: 0.00%")
 
-      print(f"Drawdown: {format_drawdown(drawdown)}")
-      print(f"Drawdown Percentage: {format_drawdown_percentage(drawdown_percentage)}")
+      print(f"Current Drawdown: {format_drawdown(drawdown)}")
+      print(f"Current Drawdown Percentage: {format_drawdown_percentage(drawdown_percentage)}")
 
       print(
             "Maximum Drawdown: "
@@ -453,6 +454,15 @@ def handle_add_trade(trades, account):
       exit_time = prompt_time(
             "Enter exit time (HH:MM) "
       )
+
+      if not confirm_trade_time_is_plausible(
+            market_type,
+            trade_date,
+            entry_time,
+            exit_time
+      ):
+            print("Trade not saved.")
+            return
 
       if market_type == "forex":
             pip_value_info = resolve_forex_pip_value(
@@ -1400,6 +1410,18 @@ def handle_edit_trade(trades, account):
                               current["exit_time"]
                         )
                   )
+
+                  if not confirm_trade_time_is_plausible(
+                        new_market_type,
+                        new_trade_date,
+                        new_entry_time,
+                        new_exit_time
+                  ):
+                        print(
+                              "Edit cancelled; trade left "
+                              "unchanged."
+                        )
+                        return
 
                   new_duration = calculate_duration(
                         new_entry_time,

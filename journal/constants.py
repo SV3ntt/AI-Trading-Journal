@@ -91,11 +91,23 @@ FOREX_ONLY_FIELDS = (
 )
 
 FUTURES_INSTRUMENT_PROFILES = {
+      "ES": {
+            "name": "E-mini S&P 500",
+            "tick_size": 0.25,
+            "tick_value": 12.50,
+            "point_value": 50.00,
+      },
       "MES": {
             "name": "Micro E-mini S&P 500",
             "tick_size": 0.25,
             "tick_value": 1.25,
             "point_value": 5.00,
+      },
+      "NQ": {
+            "name": "E-mini Nasdaq-100",
+            "tick_size": 0.25,
+            "tick_value": 5.00,
+            "point_value": 20.00,
       },
       "MNQ": {
             "name": "Micro E-mini Nasdaq-100",
@@ -103,16 +115,34 @@ FUTURES_INSTRUMENT_PROFILES = {
             "tick_value": 0.50,
             "point_value": 2.00,
       },
-      "MGC": {
-            "name": "Micro Gold",
-            "tick_size": 0.10,
-            "tick_value": 1.00,
-            "point_value": 10.00,
-      },
-      "SIL": {
-            "name": "Micro Silver",
-            "tick_size": 0.005,
+      "YM": {
+            "name": "E-mini Dow",
+            "tick_size": 1.0,
             "tick_value": 5.00,
+            "point_value": 5.00,
+      },
+      "MYM": {
+            "name": "Micro E-mini Dow",
+            "tick_size": 1.0,
+            "tick_value": 0.50,
+            "point_value": 0.50,
+      },
+      "RTY": {
+            "name": "E-mini Russell 2000",
+            "tick_size": 0.10,
+            "tick_value": 5.00,
+            "point_value": 50.00,
+      },
+      "M2K": {
+            "name": "Micro E-mini Russell 2000",
+            "tick_size": 0.10,
+            "tick_value": 0.50,
+            "point_value": 5.00,
+      },
+      "CL": {
+            "name": "WTI Crude Oil",
+            "tick_size": 0.01,
+            "tick_value": 10.00,
             "point_value": 1000.00,
       },
       "MCL": {
@@ -120,6 +150,30 @@ FUTURES_INSTRUMENT_PROFILES = {
             "tick_size": 0.01,
             "tick_value": 1.00,
             "point_value": 100.00,
+      },
+      "GC": {
+            "name": "Gold",
+            "tick_size": 0.10,
+            "tick_value": 10.00,
+            "point_value": 100.00,
+      },
+      "MGC": {
+            "name": "Micro Gold",
+            "tick_size": 0.10,
+            "tick_value": 1.00,
+            "point_value": 10.00,
+      },
+      "SI": {
+            "name": "Silver",
+            "tick_size": 0.005,
+            "tick_value": 25.00,
+            "point_value": 5000.00,
+      },
+      "SIL": {
+            "name": "Micro Silver",
+            "tick_size": 0.005,
+            "tick_value": 5.00,
+            "point_value": 1000.00,
       },
 }
 

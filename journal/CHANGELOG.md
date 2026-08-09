@@ -166,6 +166,35 @@ Added:
 - Improved formatting throughout the application
 - Standardized output layout
 
+## Sprint 29 — Version 1.1.1 Final Polish and Finalization
+
+Note: Sprints 20-28 (multi-market Futures/Forex support, the multi-file
+`journal/` package refactor, and the automated pytest suite) are not yet
+documented in this changelog. This entry covers Sprint 29 only.
+
+### Expanded Futures Instrument Support
+Added built-in profiles for 9 additional common contracts: ES, NQ, YM,
+MYM, RTY, M2K, CL, GC, SI (alongside the existing MES, MNQ, MGC, SIL,
+MCL), all sourced from the same centralized profile table. Unrecognized
+symbols continue to prompt for a custom tick size and tick value, now
+with an explicit "Using a custom Futures profile" confirmation.
+
+### Trading-Time Plausibility Warnings
+Adding or editing a Futures or Forex trade now shows a soft warning (with
+a "Save this trade anyway? (y/n)" override) when the entered date/time
+falls outside approximate Eastern Time market hours -- weekends, the
+pre-open portion of Sunday, Friday's close, and (for Futures) the daily
+maintenance window. Declining leaves the trade list and data files
+completely unchanged. This is an approximation only; it does not model
+holidays or early closes.
+
+### Drawdown Terminology Clarity
+Account Status now labels its point-in-time figures "Current Drawdown"
+and "Current Drawdown Percentage" (previously just "Drawdown" /
+"Drawdown Percentage"), matching the terminology already used in Equity
+& Drawdown History, so they can no longer be confused with "Maximum
+Drawdown."
+
 ---
 
 # Current Features
@@ -216,5 +245,5 @@ Added:
 ---
 
 Status:
-Current Version: **1.0 (CLI)**
+Current Version: **1.1.1 (CLI)**
 Development Status: **Active**

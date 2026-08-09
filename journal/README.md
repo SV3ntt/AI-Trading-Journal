@@ -55,7 +55,7 @@ Track overall account performance including:
 - Growth Percentage
 - High Water Mark
 - Current Drawdown
-- Drawdown Percentage
+- Current Drawdown Percentage
 
 ---
 

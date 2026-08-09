@@ -22,6 +22,7 @@ from journal.markets import (
     get_known_futures_profile,
     get_standard_forex_pip_profile,
 )
+from journal.validation import get_trade_time_warnings
 from journal.storage import save_account
 from journal.display import print_futures_instrument_profile
 
@@ -597,6 +598,12 @@ def resolve_futures_tick_metadata(symbol):
             f"Point value: ${derived_point_value:,.2f}"
       )
 
+      print(
+            "Using a custom Futures profile for this trade "
+            "(not one of the built-in instrument "
+            "specifications)."
+      )
+
       return tick_size, tick_value
 
 def get_optional_date(prompt): 
@@ -613,7 +620,43 @@ def get_optional_date(prompt):
                   ).date()
 
                   return parsed_date
-            
+
             except ValueError:
                   print("Invalid date. Please use YYYY-MM-DD format.")
+
+def confirm_trade_time_is_plausible(
+      market_type,
+      trade_date,
+      entry_time,
+      exit_time
+):
+      warnings = get_trade_time_warnings(
+            market_type,
+            trade_date,
+            entry_time,
+            exit_time
+      )
+
+      if not warnings:
+            return True
+
+      print(
+            "\nThis trade's date/time looks unusual for "
+            f"{market_type} markets:"
+      )
+
+      for reason in warnings:
+            print(f"  - {reason}")
+
+      print(
+            "(This is an approximate Eastern Time "
+            "market-hours check; actual holidays, brokers, "
+            "and exchange sessions can vary.)"
+      )
+
+      confirm = input(
+            "Save this trade anyway? (y/n): "
+      ).strip().lower()
+
+      return confirm == "y"
 

@@ -4,6 +4,7 @@ import pytest
 
 import journal.prompts as prompts
 from journal.prompts import (
+    confirm_trade_time_is_plausible,
     ensure_account_currency,
     get_optional_date,
     prompt_choice,
@@ -922,6 +923,7 @@ def test_resolve_futures_tick_metadata_prompts_for_unknown_contract(
     output = capsys.readouterr().out
     assert "not in the built-in specifications" in output
     assert "Point value: $4.00" in output
+    assert "custom Futures profile" in output
 
 
 def test_get_optional_date_returns_none_for_blank(monkeypatch):
@@ -953,3 +955,60 @@ def test_get_optional_date_retries_invalid_date(monkeypatch, capsys):
 
     assert get_optional_date("Date: ") == date(2026, 8, 1)
     assert "Invalid date." in capsys.readouterr().out
+
+
+def test_confirm_trade_time_is_plausible_skips_prompt_when_no_warnings(
+    monkeypatch,
+):
+    def fail_if_called(_prompt):
+        pytest.fail("input() should not be called when there are no warnings")
+
+    monkeypatch.setattr("builtins.input", fail_if_called)
+
+    # Tuesday 09:30-10:00 is ordinary trading hours -- no warning, no prompt.
+    assert confirm_trade_time_is_plausible(
+        "futures", "2026-08-04", "09:30", "10:00"
+    ) is True
+
+
+def test_confirm_trade_time_is_plausible_accepts_override(monkeypatch, capsys):
+    prompts_seen = []
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt: prompts_seen.append(prompt) or "y",
+    )
+
+    # Saturday -- always warns for both markets.
+    result = confirm_trade_time_is_plausible(
+        "futures", "2026-08-08", "09:30", "10:00"
+    )
+
+    assert result is True
+    assert prompts_seen == ["Save this trade anyway? (y/n): "]
+
+    output = capsys.readouterr().out
+    assert "unusual" in output
+    assert "Saturday" in output
+    assert "approximate Eastern Time" in output
+
+
+def test_confirm_trade_time_is_plausible_declines_override(monkeypatch):
+    provide_inputs(monkeypatch, ["n"])
+
+    result = confirm_trade_time_is_plausible(
+        "futures", "2026-08-08", "09:30", "10:00"
+    )
+
+    assert result is False
+
+
+@pytest.mark.parametrize("raw_value", ["N", "no", "", "maybe"])
+def test_confirm_trade_time_is_plausible_treats_anything_but_y_as_decline(
+    monkeypatch,
+    raw_value,
+):
+    provide_inputs(monkeypatch, [raw_value])
+
+    assert confirm_trade_time_is_plausible(
+        "forex", "2026-08-08", "09:30", "10:00"
+    ) is False

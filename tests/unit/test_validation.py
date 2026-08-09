@@ -4,10 +4,12 @@ import pytest
 
 from journal.constants import (
     FOREX_ONLY_FIELDS,
+    FUTURES_INSTRUMENT_PROFILES,
     FUTURES_ONLY_FIELDS,
     STANDARD_LOT_UNITS,
 )
 from journal.validation import (
+    get_trade_time_warnings,
     validate_and_normalize_account,
     validate_and_normalize_trade,
 )
@@ -207,6 +209,165 @@ def test_incomplete_tick_metadata_uses_point_value_fallback():
     assert normalized["tick_size"] == 0.25
     assert normalized["tick_value"] == 1.25
     assert normalized["point_value"] == 5.0
+
+
+# Every built-in Futures profile, both directions, with multiple contracts
+# and a nonzero commission. A 4-tick move against `contracts` always works
+# out to `4 * tick_value * contracts` regardless of tick_size (since
+# points_pnl * point_value == ticks_pnl * tick_value by construction), so
+# the expected dollar figures below are hand-derived from the profile's
+# own tick_value, never by calling calculate_dollar_pnl/calculate_ticks_pnl.
+@pytest.mark.parametrize("root,profile", list(FUTURES_INSTRUMENT_PROFILES.items()))
+def test_every_built_in_futures_profile_calculates_winning_pl(root, profile):
+    tick_size = profile["tick_size"]
+    tick_value = profile["tick_value"]
+    contracts = 3
+    # Smaller than the smallest possible gross win across all profiles
+    # (4 ticks * 3 contracts * $0.50 tick_value = $6.00 for MNQ/MYM/M2K),
+    # so commission never flips a gross win into a net loss here.
+    commission = 2.00
+    entry = 1000.0
+    exit_price = entry + 4 * tick_size
+
+    normalized, errors = validate_and_normalize_trade(
+        make_futures_trade(
+            symbol=root,
+            direction="long",
+            entry=entry,
+            exit=exit_price,
+            contracts=contracts,
+            tick_size=tick_size,
+            tick_value=tick_value,
+            commission=commission,
+        )
+    )
+
+    expected_dollar_pnl = 4 * tick_value * contracts
+    expected_net_dollar_pnl = expected_dollar_pnl - commission
+
+    assert errors == []
+    assert normalized["tick_size"] == tick_size
+    assert normalized["tick_value"] == tick_value
+    assert normalized["point_value"] == pytest.approx(tick_value / tick_size)
+    assert normalized["ticks_pnl"] == pytest.approx(4.0)
+    assert normalized["dollar_pnl"] == pytest.approx(expected_dollar_pnl)
+    assert normalized["net_dollar_pnl"] == pytest.approx(expected_net_dollar_pnl)
+    assert normalized["result"] == "Win"
+    assert normalized["net_result"] == "Win"
+
+
+@pytest.mark.parametrize("root,profile", list(FUTURES_INSTRUMENT_PROFILES.items()))
+def test_every_built_in_futures_profile_calculates_losing_pl(root, profile):
+    tick_size = profile["tick_size"]
+    tick_value = profile["tick_value"]
+    contracts = 3
+    commission = 7.50
+    entry = 1000.0
+    exit_price = entry - 4 * tick_size
+
+    normalized, errors = validate_and_normalize_trade(
+        make_futures_trade(
+            symbol=root,
+            direction="long",
+            entry=entry,
+            exit=exit_price,
+            contracts=contracts,
+            tick_size=tick_size,
+            tick_value=tick_value,
+            commission=commission,
+        )
+    )
+
+    expected_dollar_pnl = -4 * tick_value * contracts
+    expected_net_dollar_pnl = expected_dollar_pnl - commission
+
+    assert errors == []
+    assert normalized["ticks_pnl"] == pytest.approx(-4.0)
+    assert normalized["dollar_pnl"] == pytest.approx(expected_dollar_pnl)
+    assert normalized["net_dollar_pnl"] == pytest.approx(expected_net_dollar_pnl)
+    assert normalized["result"] == "Loss"
+    assert normalized["net_result"] == "Loss"
+
+
+@pytest.mark.parametrize("root,profile", list(FUTURES_INSTRUMENT_PROFILES.items()))
+def test_every_built_in_futures_profile_calculates_short_winning_pl(root, profile):
+    # Release-candidate audit gap: the long-direction tests above don't
+    # confirm short-direction math for the new profiles. For a short,
+    # price moving DOWN is a win: points_pnl = entry - exit.
+    tick_size = profile["tick_size"]
+    tick_value = profile["tick_value"]
+    contracts = 3
+    commission = 2.00
+    entry = 1000.0
+    exit_price = entry - 4 * tick_size
+
+    normalized, errors = validate_and_normalize_trade(
+        make_futures_trade(
+            symbol=root,
+            direction="short",
+            entry=entry,
+            exit=exit_price,
+            contracts=contracts,
+            tick_size=tick_size,
+            tick_value=tick_value,
+            commission=commission,
+        )
+    )
+
+    expected_dollar_pnl = 4 * tick_value * contracts
+    expected_net_dollar_pnl = expected_dollar_pnl - commission
+
+    assert errors == []
+    assert normalized["ticks_pnl"] == pytest.approx(4.0)
+    assert normalized["dollar_pnl"] == pytest.approx(expected_dollar_pnl)
+    assert normalized["net_dollar_pnl"] == pytest.approx(expected_net_dollar_pnl)
+    assert normalized["result"] == "Win"
+    assert normalized["net_result"] == "Win"
+
+
+@pytest.mark.parametrize("root,profile", list(FUTURES_INSTRUMENT_PROFILES.items()))
+def test_every_built_in_futures_profile_calculates_short_losing_pl(root, profile):
+    # For a short, price moving UP is a loss: points_pnl = entry - exit
+    # is negative when exit > entry.
+    tick_size = profile["tick_size"]
+    tick_value = profile["tick_value"]
+    contracts = 3
+    commission = 2.00
+    entry = 1000.0
+    exit_price = entry + 4 * tick_size
+
+    normalized, errors = validate_and_normalize_trade(
+        make_futures_trade(
+            symbol=root,
+            direction="short",
+            entry=entry,
+            exit=exit_price,
+            contracts=contracts,
+            tick_size=tick_size,
+            tick_value=tick_value,
+            commission=commission,
+        )
+    )
+
+    expected_dollar_pnl = -4 * tick_value * contracts
+    expected_net_dollar_pnl = expected_dollar_pnl - commission
+
+    assert errors == []
+    assert normalized["ticks_pnl"] == pytest.approx(-4.0)
+    assert normalized["dollar_pnl"] == pytest.approx(expected_dollar_pnl)
+    assert normalized["net_dollar_pnl"] == pytest.approx(expected_net_dollar_pnl)
+    assert normalized["result"] == "Loss"
+    assert normalized["net_result"] == "Loss"
+
+
+@pytest.mark.parametrize("root,profile", list(FUTURES_INSTRUMENT_PROFILES.items()))
+def test_every_built_in_futures_profile_is_internally_consistent(root, profile):
+    assert profile["point_value"] == pytest.approx(
+        profile["tick_value"] / profile["tick_size"]
+    )
+    assert profile["tick_size"] > 0
+    assert profile["tick_value"] > 0
+    assert isinstance(profile["name"], str) and profile["name"] != ""
 
 
 def test_short_futures_trade_calculates_profit_correctly():
@@ -984,3 +1145,171 @@ def test_account_currency_is_normalized_or_cleared(
 
     assert errors == []
     assert normalized["account_currency"] == expected
+
+
+# get_trade_time_warnings: soft plausibility checks (approximate ET).
+# Reference week used throughout: Mon 2026-08-03 ... Sun 2026-08-09.
+
+@pytest.mark.parametrize(
+    "trade_date",
+    [
+        "2026-08-03",  # Monday
+        "2026-08-04",  # Tuesday
+        "2026-08-05",  # Wednesday
+        "2026-08-06",  # Thursday
+        "2026-08-07",  # Friday
+    ],
+)
+@pytest.mark.parametrize("market_type", ["futures", "forex"])
+def test_normal_weekday_trading_hours_produce_no_warnings(
+    market_type,
+    trade_date,
+):
+    assert get_trade_time_warnings(
+        market_type, trade_date, "09:30", "10:00"
+    ) == []
+
+
+@pytest.mark.parametrize("market_type", ["futures", "forex"])
+def test_saturday_always_warns(market_type):
+    warnings = get_trade_time_warnings(
+        market_type, "2026-08-08", "09:30", "10:00"
+    )
+
+    assert len(warnings) == 2
+    assert all("Saturday" in reason for reason in warnings)
+
+
+@pytest.mark.parametrize(
+    ("market_type", "open_minutes"),
+    [("futures", "18:00"), ("forex", "17:00")],
+)
+def test_sunday_before_open_warns_and_at_open_does_not(
+    market_type,
+    open_minutes,
+):
+    before_open = get_trade_time_warnings(
+        market_type, "2026-08-09", "12:00", "12:30"
+    )
+    assert len(before_open) == 2
+    assert all("reopened" in reason for reason in before_open)
+
+    at_open = get_trade_time_warnings(
+        market_type, "2026-08-09", open_minutes, "19:00"
+    )
+    assert at_open == []
+
+
+@pytest.mark.parametrize("market_type", ["futures", "forex"])
+def test_friday_before_close_is_plausible_at_close_is_not(market_type):
+    before_close = get_trade_time_warnings(
+        market_type, "2026-08-07", "16:00", "16:59"
+    )
+    assert before_close == []
+
+    at_close = get_trade_time_warnings(
+        market_type, "2026-08-07", "16:45", "17:00"
+    )
+    assert len(at_close) == 1
+    assert "closed for the weekend" in at_close[0]
+
+
+@pytest.mark.parametrize(
+    "trade_date",
+    ["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06"],
+)
+def test_futures_daily_maintenance_window_warns(trade_date):
+    warnings = get_trade_time_warnings(
+        "futures", trade_date, "16:50", "17:05"
+    )
+
+    assert len(warnings) == 1
+    assert "maintenance break" in warnings[0]
+
+
+@pytest.mark.parametrize(
+    "trade_date",
+    ["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06"],
+)
+def test_forex_has_no_daily_maintenance_window(trade_date):
+    assert get_trade_time_warnings(
+        "forex", trade_date, "16:50", "17:30"
+    ) == []
+
+
+def test_futures_maintenance_window_boundary_is_inclusive_exclusive():
+    # 17:00 itself is inside the window (inclusive start).
+    assert get_trade_time_warnings(
+        "futures", "2026-08-04", "17:00", "17:01"
+    ) != []
+
+    # 18:00 itself is outside the window (exclusive end) -- both entry
+    # and exit sit at or after 18:00 so neither side is inside the window.
+    assert get_trade_time_warnings(
+        "futures", "2026-08-04", "18:00", "18:05"
+    ) == []
+
+
+def test_sunday_futures_reopen_boundary_is_exclusive():
+    # 17:59 is still before the 18:00 Futures reopen.
+    assert get_trade_time_warnings(
+        "futures", "2026-08-09", "17:59", "19:00"
+    ) != []
+
+    # 18:00 itself is open.
+    assert get_trade_time_warnings(
+        "futures", "2026-08-09", "18:00", "19:00"
+    ) == []
+
+
+def test_friday_close_boundary_is_inclusive():
+    assert get_trade_time_warnings(
+        "futures", "2026-08-07", "16:59", "17:00"
+    ) != []
+
+    assert get_trade_time_warnings(
+        "futures", "2026-08-07", "16:00", "16:59"
+    ) == []
+
+
+def test_overnight_trade_crossing_midnight_is_not_flagged_backwards():
+    # exit (00:15) numerically precedes entry (23:50) on the same
+    # trade_date -- this mirrors calculate_duration()'s own overnight
+    # rollover and must not be treated as an implausible "exit before
+    # entry" condition. A Thursday-night entry rolls into a perfectly
+    # normal Friday-morning exit, so this should be silent.
+    assert get_trade_time_warnings(
+        "futures", "2026-08-06", "23:50", "00:15"
+    ) == []
+
+
+def test_overnight_trade_crossing_into_saturday_still_warns_for_exit():
+    # Friday 23:50 entry rolls over into Saturday 00:15 exit -- the exit
+    # side should warn (Saturday is always closed) even though the entry
+    # side (Friday 23:50, after the 17:00 close) also independently warns.
+    warnings = get_trade_time_warnings(
+        "futures", "2026-08-07", "23:50", "00:15"
+    )
+
+    assert any("Exit time (Saturday" in reason for reason in warnings)
+    assert any("Entry time (Friday" in reason for reason in warnings)
+
+
+@pytest.mark.parametrize(
+    ("trade_date", "entry_time", "exit_time"),
+    [
+        (None, "09:30", "10:00"),
+        ("2026-08-03", None, "10:00"),
+        ("2026-08-03", "09:30", None),
+        ("not-a-date", "09:30", "10:00"),
+        ("2026-08-03", "bad-time", "10:00"),
+    ],
+)
+def test_unparseable_input_returns_no_warnings_instead_of_raising(
+    trade_date,
+    entry_time,
+    exit_time,
+):
+    assert get_trade_time_warnings(
+        "futures", trade_date, entry_time, exit_time
+    ) == []

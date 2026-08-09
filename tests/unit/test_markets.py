@@ -25,10 +25,20 @@ from journal.markets import(
         ("MGC", "MGC"),
         ("SIL", "SIL"),
         ("MCL", "MCL"),
-    ], 
+        ("ES", "ES"),
+        ("es", "ES"),
+        ("NQ", "NQ"),
+        ("YM", "YM"),
+        ("MYM", "MYM"),
+        ("RTY", "RTY"),
+        ("M2K", "M2K"),
+        ("CL", "CL"),
+        ("GC", "GC"),
+        ("SI", "SI"),
+    ],
 )
 def test_match_known_futures_root_accepts_root_symbols(
-    symbol, 
+    symbol,
     expected,
 ):
     assert match_known_futures_root(symbol) == expected
@@ -40,11 +50,18 @@ def test_match_known_futures_root_accepts_root_symbols(
     ("mes1!", "MES"),
     ("MNQ1!", "MNQ"),
     ("MGC1!", "MGC"),
-    ], 
+    ("ES1!", "ES"),
+    ("NQ1!", "NQ"),
+    ("YM1!", "YM"),
+    ("RTY1!", "RTY"),
+    ("CL1!", "CL"),
+    ("GC1!", "GC"),
+    ("SI1!", "SI"),
+    ],
 )
 def test_match_known_futures_root_accepts_continous_symbols(
-    symbol, 
-    expected, 
+    symbol,
+    expected,
 ):
     assert match_known_futures_root(symbol) == expected
 
@@ -57,30 +74,39 @@ def test_match_known_futures_root_accepts_continous_symbols(
         ("MGCQ26", "MGC"),
         ("SILN6", "SIL"),
         ("MCLX26", "MCL"),
+        ("ESZ26", "ES"),
+        ("nqh7", "NQ"),
+        ("YMM26", "YM"),
+        ("MYMZ6", "MYM"),
+        ("RTYH26", "RTY"),
+        ("M2KZ26", "M2K"),
+        ("CLQ26", "CL"),
+        ("GCJ26", "GC"),
+        ("SIK26", "SI"),
     ],
 )
 def test_match_known_futures_root_accepts_dead_contracts(
-    symbol, 
+    symbol,
     expected,
 ):
     assert match_known_futures_root(symbol) == expected
 
 
 @pytest.mark.parametrize(
-    "symbol", 
+    "symbol",
     [
-        "ES",
-        "NQ",
+        "ZB",
+        "6E",
         "UNKOWN",
         "MESZ",
-        "MESZ2026", 
+        "MESZ2026",
         "MES21!",
         "",
         None,
     ],
 )
 def test_match_known_futures_root_rejects_unknown_or_invalid_symbols(
-    symbol, 
+    symbol,
 ):
     assert match_known_futures_root(symbol) is None
 
@@ -104,7 +130,7 @@ def test_get_known_futures_profile_retuens_copy():
     assert second_result["tick_size"] == 0.25
 
 def test_get_known_futures_profile_retuens_none_for_unknown_symbol():
-    assert get_known_futures_profile("ES") is None
+    assert get_known_futures_profile("ZB") is None
 
 @pytest.mark.parametrize(
     ("symbol", "expected"),
@@ -120,7 +146,7 @@ def test_get_known_futures_tick_size_(symbol, expected):
     assert get_known_futures_tick_size(symbol) == expected
 
 def test_get_known_futures_tick_size_returns_none_for_unknown_symbol():
-    assert get_known_futures_tick_size("CL") is None
+    assert get_known_futures_tick_size("ZB") is None
 
 @pytest.mark.parametrize(
     ("symbol", "expected"),
@@ -136,7 +162,7 @@ def test_get_known_futures_tick_value_(symbol, expected):
     assert get_known_futures_tick_value(symbol) == expected
 
 def test_get_known_futures_tick_value_returns_none_for_unknown_symbol():
-    assert get_known_futures_tick_value("CL") is None
+    assert get_known_futures_tick_value("ZB") is None
 
 @pytest.mark.parametrize(
     ("symbol", "expected"),
@@ -261,8 +287,8 @@ def test_get_fx_conversion_rate_skips_lookup_for_matching_currencies(
 
     assert result == (1.0, "not_required")
 
-def test_get_fx_conversion_rate_retuens_none_when_provider_has_no_quote(
-        monkeypatch, 
+def test_get_fx_conversion_rate_returns_none_when_provider_has_no_quote(
+        monkeypatch,
 ):
     monkeypatch.setattr(
         markets,
@@ -270,13 +296,13 @@ def test_get_fx_conversion_rate_retuens_none_when_provider_has_no_quote(
         lambda from_currency, to_currency, timestamp: None,
     )
 
-result = get_fx_conversion_rate(
-    "JPY",
-    "USD",
-    "2026-07-30T10:00",
-)
+    result = get_fx_conversion_rate(
+        "JPY",
+        "USD",
+        "2026-07-30T10:00",
+    )
 
-assert result == (None, None)
+    assert result == (None, None)
 
 def test_get_fx_conversion_rate_returns_direct_provider_quote(
     monkeypatch,

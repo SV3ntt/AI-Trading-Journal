@@ -835,6 +835,214 @@ def test_calculate_equity_drawdown_history_treats_invalid_pnl_as_zero(
     assert result["history"][0]["net_dollar_pnl"] == 0.0
 
 
+# Sprint 29 regression suite: high-water-mark / drawdown reconstruction
+# after editing or deleting a trade. All expected figures below are
+# hand-derived from starting_balance + cumulative net_dollar_pnl, never
+# by calling calculate_equity_drawdown_history itself.
+#
+# Investigation note (Sprint 29 bug report): a real-account scenario
+# reported "high water mark == current balance, $0.00 drawdown" after
+# editing a winning M2K trade into a loss, and expected a non-zero
+# drawdown instead. Reproducing it against the real (untouched) trade
+# data confirmed the existing chronological algorithm was already
+# correct: three trades dated *after* the edited one were collectively
+# profitable enough to not only recover its loss but set a brand-new
+# all-time high by the most recent trade, so $0.00 drawdown was the
+# mathematically correct answer for that specific dataset. No production
+# code changed as a result -- these tests instead pin down the general
+# rebuild behavior with clean, unambiguous synthetic scenarios.
+
+def test_editing_a_winning_trade_into_a_final_loss_shows_real_drawdown():
+    # Trade 1 sets a peak; trade 2 (originally a win, edited to a loss)
+    # is the last trade chronologically, so nothing recovers it.
+    trades = [
+        make_trade(
+            symbol="mes", trade_date="2026-01-01",
+            entry_time="09:30", net_dollar_pnl=200.0,
+        ),
+        make_trade(
+            symbol="m2k", trade_date="2026-01-02",
+            entry_time="09:30", net_dollar_pnl=-121.0,
+        ),
+    ]
+
+    result = calculate_equity_drawdown_history(trades, 1000.0)
+
+    assert result["ending_balance"] == pytest.approx(1079.0)
+    assert result["high_water_mark"] == pytest.approx(1200.0)
+    assert result["current_drawdown"] == pytest.approx(121.0)
+    assert result["current_drawdown_percentage"] == pytest.approx(
+        121.0 / 1200.0 * 100
+    )
+
+
+def test_loss_recovered_by_larger_later_trades_shows_zero_drawdown():
+    # Mirrors the confirmed-correct Sprint 29 investigation: a loss sits
+    # between two peaks, but a trade dated *after* it is large enough to
+    # both recover the loss and set a brand-new high water mark. Current
+    # drawdown is correctly zero, not the pre-loss peak.
+    trades = [
+        make_trade(
+            symbol="mes", trade_date="2026-01-01",
+            entry_time="09:30", net_dollar_pnl=1000.0,
+        ),
+        make_trade(
+            symbol="m2k", trade_date="2026-01-02",
+            entry_time="09:30", net_dollar_pnl=-121.0,
+        ),
+        make_trade(
+            symbol="mes", trade_date="2026-01-03",
+            entry_time="09:30", net_dollar_pnl=300.0,
+        ),
+    ]
+
+    result = calculate_equity_drawdown_history(trades, 1000.0)
+
+    assert result["ending_balance"] == pytest.approx(2179.0)
+    assert result["high_water_mark"] == pytest.approx(2179.0)
+    assert result["current_drawdown"] == 0.0
+    assert result["current_drawdown_percentage"] == 0.0
+
+
+def test_editing_a_losing_trade_into_a_win_clears_drawdown():
+    trades = [
+        make_trade(
+            symbol="mes", trade_date="2026-01-01",
+            entry_time="09:30", net_dollar_pnl=500.0,
+        ),
+        make_trade(
+            symbol="mnq", trade_date="2026-01-02",
+            entry_time="09:30", net_dollar_pnl=100.0,  # was a loss, edited to a win
+        ),
+    ]
+
+    result = calculate_equity_drawdown_history(trades, 1000.0)
+
+    assert result["ending_balance"] == pytest.approx(1600.0)
+    assert result["high_water_mark"] == pytest.approx(1600.0)
+    assert result["current_drawdown"] == 0.0
+    assert result["current_drawdown_percentage"] == 0.0
+
+
+def test_editing_an_earlier_historical_trade_rebuilds_all_later_balances():
+    # Trade 1 (the earliest) is edited into a much bigger loss than
+    # before; every later balance must shift by the same delta and the
+    # high water mark must fall back to the starting balance, since the
+    # edited loss now exceeds every later trade's recovery.
+    trades = [
+        make_trade(
+            symbol="mes", trade_date="2026-01-01",
+            entry_time="09:30", net_dollar_pnl=-2000.0,
+        ),
+        make_trade(
+            symbol="mnq", trade_date="2026-01-02",
+            entry_time="09:30", net_dollar_pnl=300.0,
+        ),
+        make_trade(
+            symbol="mgc", trade_date="2026-01-03",
+            entry_time="09:30", net_dollar_pnl=300.0,
+        ),
+    ]
+
+    result = calculate_equity_drawdown_history(trades, 5000.0)
+
+    assert [row["equity"] for row in result["history"]] == [
+        3000.0, 3300.0, 3600.0,
+    ]
+    assert result["ending_balance"] == pytest.approx(3600.0)
+    assert result["high_water_mark"] == pytest.approx(5000.0)
+    assert result["maximum_drawdown_peak"] == "Starting Balance"
+    assert result["current_drawdown"] == pytest.approx(1400.0)
+
+
+def test_deleting_a_winning_trade_rebuilds_a_lower_peak():
+    # Simulates the post-delete trades list (the big winner that used to
+    # set the peak is simply absent) -- the peak must be recomputed from
+    # what remains, not carried over from the deleted trade.
+    remaining_trades = [
+        make_trade(
+            symbol="mes", trade_date="2026-01-01",
+            entry_time="09:30", net_dollar_pnl=100.0,
+        ),
+        make_trade(
+            symbol="mgc", trade_date="2026-01-03",
+            entry_time="09:30", net_dollar_pnl=-50.0,
+        ),
+    ]
+
+    result = calculate_equity_drawdown_history(remaining_trades, 1000.0)
+
+    assert result["ending_balance"] == pytest.approx(1050.0)
+    assert result["high_water_mark"] == pytest.approx(1100.0)
+    assert result["current_drawdown"] == pytest.approx(50.0)
+
+
+def test_deleting_a_losing_trade_removes_its_drawdown_contribution():
+    remaining_trades = [
+        make_trade(
+            symbol="mes", trade_date="2026-01-01",
+            entry_time="09:30", net_dollar_pnl=500.0,
+        ),
+        make_trade(
+            symbol="mgc", trade_date="2026-01-03",
+            entry_time="09:30", net_dollar_pnl=200.0,
+        ),
+    ]
+
+    result = calculate_equity_drawdown_history(remaining_trades, 1000.0)
+
+    assert result["ending_balance"] == pytest.approx(1700.0)
+    assert result["high_water_mark"] == pytest.approx(1700.0)
+    assert result["current_drawdown"] == 0.0
+
+
+def test_final_losing_trade_below_previous_peak_shows_nonzero_drawdown():
+    trades = [
+        make_trade(
+            symbol="mes", trade_date="2026-01-01",
+            entry_time="09:30", net_dollar_pnl=800.0,
+        ),
+        make_trade(
+            symbol="mnq", trade_date="2026-01-02",
+            entry_time="09:30", net_dollar_pnl=-300.0,
+        ),
+    ]
+
+    result = calculate_equity_drawdown_history(trades, 1000.0)
+
+    assert result["ending_balance"] == pytest.approx(1500.0)
+    assert result["high_water_mark"] == pytest.approx(1800.0)
+    assert result["current_drawdown"] == pytest.approx(300.0)
+    assert result["current_drawdown_percentage"] == pytest.approx(
+        300.0 / 1800.0 * 100
+    )
+
+
+def test_starting_balance_remains_high_water_mark_when_all_trades_lose():
+    trades = [
+        make_trade(
+            symbol="mes", trade_date="2026-01-01",
+            entry_time="09:30", net_dollar_pnl=-100.0,
+        ),
+        make_trade(
+            symbol="mnq", trade_date="2026-01-02",
+            entry_time="09:30", net_dollar_pnl=-50.0,
+        ),
+        make_trade(
+            symbol="mgc", trade_date="2026-01-03",
+            entry_time="09:30", net_dollar_pnl=-25.0,
+        ),
+    ]
+
+    result = calculate_equity_drawdown_history(trades, 1000.0)
+
+    assert result["ending_balance"] == pytest.approx(825.0)
+    assert result["high_water_mark"] == 1000.0
+    assert result["maximum_drawdown_peak"] == "Starting Balance"
+    assert result["current_drawdown"] == pytest.approx(175.0)
+    assert result["current_drawdown_percentage"] == pytest.approx(17.5)
+
+
 @pytest.mark.parametrize(
     ("trade", "expected"),
     [

@@ -260,6 +260,52 @@ class TradeWorkflowIntegrationTests(unittest.TestCase):
         self.assertEqual(reloaded[0]["dollar_pnl"], -50.0)
         self.assertEqual(reloaded[0]["net_dollar_pnl"], -54.0)
 
+    def test_custom_futures_profile_survives_save_reload_and_edit(self):
+        # Release-candidate audit gap: a symbol not in the built-in
+        # profile table (as resolve_futures_tick_metadata's manual-entry
+        # path would produce) must persist its custom tick_size/tick_value
+        # through a save/reload/edit round trip exactly like a
+        # built-in-profile trade does.
+        custom = normalize_trade(
+            make_futures_trade(
+                symbol="ZB",  # not in FUTURES_INSTRUMENT_PROFILES
+                entry=120.00,
+                exit=120.50,
+                contracts=2,
+                tick_size=0.03125,
+                tick_value=31.25,
+                commission=4.0,
+            )
+        )
+        # Explicit tick_size/tick_value always derive point_value, whether
+        # or not the symbol matches a built-in profile.
+        self.assertAlmostEqual(custom["point_value"], 1000.0)
+
+        self.assertTrue(storage.save_trades([custom]))
+        reloaded = storage.load_trades()
+
+        self.assertEqual(reloaded[0]["symbol"], "zb")
+        self.assertEqual(reloaded[0]["tick_size"], 0.03125)
+        self.assertEqual(reloaded[0]["tick_value"], 31.25)
+        self.assertAlmostEqual(reloaded[0]["point_value"], 1000.0)
+        self.assertAlmostEqual(reloaded[0]["dollar_pnl"], 1000.0)
+        self.assertAlmostEqual(reloaded[0]["net_dollar_pnl"], 996.0)
+
+        # Now edit an unrelated field and confirm the custom tick
+        # metadata is still intact afterward.
+        edited_input = dict(reloaded[0])
+        edited_input["notes"] = "Edited after custom profile save"
+        edited = normalize_trade(edited_input)
+        reloaded[0] = edited
+        self.assertTrue(storage.save_trades(reloaded))
+
+        final = storage.load_trades()
+        self.assertEqual(final[0]["tick_size"], 0.03125)
+        self.assertEqual(final[0]["tick_value"], 31.25)
+        self.assertAlmostEqual(final[0]["point_value"], 1000.0)
+        self.assertAlmostEqual(final[0]["dollar_pnl"], 1000.0)
+        self.assertEqual(final[0]["notes"], "Edited after custom profile save")
+
     def test_deleting_trade_persists_and_updates_analytics(self):
         win = normalize_trade(make_futures_trade())
         loss = normalize_trade(
